@@ -18,7 +18,7 @@ c.session=Path(tempfile.mkdtemp(prefix='storage_check_',dir=Path(__file__).paren
 c.round=0
 c.gesture=0
 c.accepted=0
-c.classes=CLASSES;c.splits=SPLITS;c.total=20;c.negative=False
+c.classes=CLASSES;c.splits=SPLITS;c.total=20;c.negative=False;c.wide_angles=False
 for name in ['title','instruction','timer','progress','cancel_button','record_button','hand','new_hand_button']:
     setattr(c,name,Dummy())
 c.samples=[['fixture',i/8,'Right',640,480,*([0.1]*len(COORDS))] for i in range(60)]
@@ -48,3 +48,12 @@ entries=[json.loads(line) for line in (c.session/'clips.jsonl').read_text().spli
 assert c.accepted==3 and c.round==3
 assert [(e['split'],e['label']) for e in entries]==[('train','neutral'),('validation','neutral'),('test','neutral')]
 print('PASS: supplemental three-finger data uses three separate rounds and retains neutral label')
+
+c.session=Path(tempfile.mkdtemp(prefix='wide_storage_check_',dir=Path(__file__).parent))
+c.round=0;c.gesture=0;c.accepted=0;c.wide_angles=True;c.splits=SPLITS;c.total=5
+for _ in range(5):c.finish(True,'wide_negative_test')
+entries=[json.loads(line) for line in (c.session/'clips.jsonl').read_text().splitlines()]
+assert c.accepted==5 and c.round==5
+assert [e['split'] for e in entries]==SPLITS
+assert all(e['label']=='neutral' for e in entries)
+print('PASS: wider-angle negatives retain grouped 3-train/1-validation/1-test rounds')

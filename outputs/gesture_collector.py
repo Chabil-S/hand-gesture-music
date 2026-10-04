@@ -36,10 +36,11 @@ def now():
     return datetime.now(timezone(timedelta(hours=7))).isoformat()
 
 class Collector:
-    def __init__(self, initial_hand='ขวา', negative=False):
+    def __init__(self, initial_hand='ขวา', negative=False, wide_angles=False):
         self.negative=negative
+        self.wide_angles=wide_angles
         self.classes=[('neutral','ไม่สั่งงาน','ชูสามนิ้ว','ชูโป้ง ชี้ กลาง พร้อมกัน คงท่าและพลิกหน้ามือ/หลังมือช้า ๆ')] if negative else CLASSES
-        self.splits=['train','validation','test'] if negative else SPLITS
+        self.splits=(SPLITS if wide_angles else ['train','validation','test']) if negative else SPLITS
         self.total=len(self.classes)*len(self.splits)
         self.root = tk.Tk()
         self.root.title('Hand Gesture Music — Data Collection')
@@ -126,7 +127,13 @@ class Collector:
         purpose={'train':'ชุดฝึก','validation':'ชุดเลือกโมเดล','test':'ชุดทดสอบท้ายงาน'}[self.splits[self.round]]
         _,action,pose,hint=self.classes[self.gesture]
         self.title.set(f'มือ{self.hand.get()} • รอบ {self.round+1}/{len(self.splits)}\n{purpose} • {action} — {pose}')
-        self.instruction.set(hint+'\nขยับระยะและมุมเล็กน้อยขณะคงท่าเดิม')
+        if self.negative and self.wide_angles:
+            hint=['หันฝ่ามือเข้ากล้อง ขยับระยะและเอียงซ้าย/ขวา',
+                  'หันหลังมือเข้ากล้อง ขยับระยะและเอียงซ้าย/ขวา',
+                  'พลิกหน้ามือและหลังมือช้า ๆ พร้อมเปลี่ยนมุมและระยะ',
+                  'ลองมุมผสมทั้งหน้ามือ/หลังมือ คงสามนิ้วไว้',
+                  'ลองใหม่อย่างอิสระทั้งหน้ามือ/หลังมือและมุมที่ใช้จริง'][self.round]
+        self.instruction.set(hint+'\nชูโป้ง ชี้ กลางให้ครบตลอดช่วง' if self.negative else hint+'\nขยับระยะและมุมเล็กน้อยขณะคงท่าเดิม')
 
     def new_hand(self):
         if self.phase!='idle' or self.round<len(self.splits): return
@@ -219,6 +226,7 @@ class Collector:
         self.session.mkdir(parents=True,exist_ok=False)
         metadata={'session_id':ident,'participant':'user_01','declared_hand':self.hand.get(),
                   'created':now(),'round_splits':self.splits,'classes':[x[0] for x in self.classes],
+                  'angle_protocol':'front_back_varied_v2' if self.wide_angles else 'original',
                   'collection_kind':'three_finger_negative' if self.negative else 'base_four_classes',
                   'mirrored':True,'landmarker_sha256':hashlib.sha256(MODEL.read_bytes()).hexdigest(),
                   'record_seconds':12,'sample_interval_seconds':0.125,
@@ -333,5 +341,7 @@ if __name__=='__main__':
     parser=argparse.ArgumentParser()
     parser.add_argument('--hand',choices=['right','left'],default='right')
     parser.add_argument('--negative',action='store_true')
+    parser.add_argument('--wide-angles',action='store_true')
     options=parser.parse_args()
-    Collector('ซ้าย' if options.hand=='left' else 'ขวา',options.negative).root.mainloop()
+    if options.wide_angles and not options.negative:parser.error('--wide-angles requires --negative')
+    Collector('ซ้าย' if options.hand=='left' else 'ขวา',options.negative,options.wide_angles).root.mainloop()
