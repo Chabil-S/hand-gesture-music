@@ -1,0 +1,58 @@
+import csv,json,sys,time,threading,queue
+from pathlib import Path
+import numpy as np
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'outputs'))
+from control_runtime import ActiveHand,MusicQueue,thumb_is_extended
+from gesture_features import GestureGate
+
+def hand(x,label):
+    p=np.zeros((21,3));p[:,0]=x;p[9,1]=.1
+    return {'coords':p.reshape(-1).tolist(),'label':label}
+selector=ActiveHand()
+index,_,_=selector.select([hand(.2,'next'),hand(.8,'neutral')],0,True)
+assert index==0
+index,changed,_=selector.select([hand(.8,'neutral'),hand(.21,'next')],.1,False)
+assert index==1 and not changed
+assert selector.select([hand(.2,'next'),hand(.8,'toggle')],.2,False)[2]=='conflict'
+assert selector.select([hand(.8,'neutral')],.3,False)[2]=='active_missing'
+selector.reset()
+assert selector.select([hand(.2,'toggle'),hand(.8,'toggle')],0,True)[0] is not None
+
+results=queue.Queue();blocked=threading.Event();entered=threading.Event();calls=[]
+def runner(action):
+    calls.append(action)
+    if action=='first':entered.set();blocked.wait(2)
+    return {'action':action}
+dispatcher=MusicQueue(runner,results)
+dispatcher.submit('first');assert entered.wait(1)
+dispatcher.submit('second')
+gate=GestureGate()
+assert sum(gate.update('toggle',i*.05) is not None for i in range(20))==1
+for t in np.arange(1,1.5,.05):gate.update('no_hand',float(t))
+assert sum(gate.update('toggle',float(t)) is not None for t in np.arange(1.5,2.5,.05))==1
+blocked.set()
+assert results.get(timeout=2)[0]=='first'
+assert results.get(timeout=2)[0]=='second'
+assert calls==['first','second']
+blocked.clear();entered.clear();dispatcher.submit('first');assert entered.wait(1)
+dispatcher.submit('cancel_me');dispatcher.cancel_pending();blocked.set()
+results.get(timeout=2)
+assert results.get(timeout=2)[2]=='cancelled' and 'cancel_me' not in calls
+
+# Engineering veto check on train/validation only; never use old test to tune it.
+base=Path(__file__).resolve().parents[1]/'outputs'
+counts={}
+for directory in ((base/'data'/'raw').iterdir() if (base/'data'/'raw').exists() else []):
+    if not directory.is_dir():continue
+    for line in (directory/'clips.jsonl').read_text(encoding='utf-8').splitlines():
+        clip=json.loads(line)
+        if not clip['accepted'] or clip['split']=='test':continue
+        with (directory/clip['csv']).open(encoding='utf-8',newline='') as f:
+            for row in csv.DictReader(f):
+                if row['label']!='next':continue
+                key=directory.name+':'+row['split'];counts.setdefault(key,[0,0]);counts[key][1]+=1
+                coords=[float(row[f'{a}{i}']) for i in range(21) for a in 'xyz']
+                counts[key][0]+=int(thumb_is_extended(coords,int(row['width']),int(row['height'])))
+print('PASS: hand ordering, two-hand conflict, single firing for matching poses, ordered commands, receive/release during wait, pause cancellation')
+print('V-pose frames vetoed / V-pose frames on train and validation:',counts)
+(base/'live_guard_validation.json').write_text(json.dumps(counts,indent=2),encoding='utf-8')
