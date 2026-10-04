@@ -74,9 +74,17 @@ async def run(action):
         else:
             record['api_accepted'] = bool(await asyncio.wait_for(methods[action](), timeout=5))
         record['observations'] = []
-        for _ in range(4):
-            await asyncio.sleep(0.75)
-            record['observations'].append(await snapshot(session))
+        deadline=time.monotonic()+1.5
+        while time.monotonic()<deadline:
+            await asyncio.sleep(0.08)
+            observed=await snapshot(session)
+            record['observations'].append(observed)
+            succeeded=(observed['title']!=before['title'] if action in ('next','previous_track')
+                       else observed['status']!=before['status'] if action=='toggle'
+                       else observed['status']=='PLAYING' if action=='play'
+                       else observed['status']=='PAUSED' if action=='pause'
+                       else observed['title']!=before['title'] or observed['position_seconds']<before['position_seconds'])
+            if succeeded:break
         record['after'] = record['observations'][-1]
         if action in ('next', 'previous_track'):
             record['observed_success'] = record['after']['title'] != before['title']
