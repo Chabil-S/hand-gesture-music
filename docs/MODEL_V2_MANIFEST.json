@@ -1,0 +1,129 @@
+{
+  "model_directory": "models/20261004_221121",
+  "selected_model": "Joint Logistic C=1",
+  "threshold": 0.8,
+  "sha256": "e141e6e649b183e6dba6cffe46c425ca2725ec947236dc7f46a4f85cde0b3e93",
+  "counts": {
+    "train": 2744,
+    "validation": 1022,
+    "test": 1022
+  },
+  "features": "10 joint-angle cosines and 13 fingertip distances derived from palm-scaled pairwise features; learned classifier, no hand-written thumb veto",
+  "test_session_scope": {
+    "20261004_164812_880695b7": "regression",
+    "20261004_170111_6061004a": "regression",
+    "20261004_213227_e473cd01": "regression",
+    "20261004_213327_e716ec14": "regression",
+    "20261004_214228_b32c7afd": "fresh",
+    "20261004_215459_f2337609": "fresh",
+    "20261004_215636_c4ef72cc": "fresh"
+  },
+  "validation_and_test_checks": {
+    "validation": {
+      "passed": true,
+      "per_hand": {
+        "left": {
+          "three_finger_samples": 236,
+          "three_finger_false_commands": 6,
+          "v_samples": 80,
+          "v_accepted": 80,
+          "three_finger_clips": 3,
+          "three_finger_command_events": 0,
+          "v_clips": 1,
+          "v_confirmed_clips": 1
+        },
+        "right": {
+          "three_finger_samples": 153,
+          "three_finger_false_commands": 0,
+          "v_samples": 79,
+          "v_accepted": 79,
+          "three_finger_clips": 2,
+          "three_finger_command_events": 0,
+          "v_clips": 1,
+          "v_confirmed_clips": 1
+        }
+      },
+      "rule": "zero three-finger command events through the unchanged gate, exactly one next per V clip, and >=95% V frame recall per hand"
+    },
+    "test": {
+      "passed": true,
+      "per_hand": {
+        "left": {
+          "three_finger_samples": 238,
+          "three_finger_false_commands": 1,
+          "v_samples": 77,
+          "v_accepted": 77,
+          "three_finger_clips": 3,
+          "three_finger_command_events": 0,
+          "v_clips": 1,
+          "v_confirmed_clips": 1
+        },
+        "right": {
+          "three_finger_samples": 150,
+          "three_finger_false_commands": 0,
+          "v_samples": 80,
+          "v_accepted": 79,
+          "three_finger_clips": 2,
+          "three_finger_command_events": 0,
+          "v_clips": 1,
+          "v_confirmed_clips": 1
+        }
+      },
+      "rule": "zero three-finger command events through the unchanged gate, exactly one next per V clip, and >=95% V frame recall per hand"
+    }
+  },
+  "test_by_session": {
+    "20261004_164812_880695b7": {
+      "kind": "base_four_classes",
+      "hand": "right",
+      "samples": 322,
+      "false_commands": 0,
+      "accepted_accuracy": 0.9968944099378882
+    },
+    "20261004_170111_6061004a": {
+      "kind": "base_four_classes",
+      "hand": "left",
+      "samples": 312,
+      "false_commands": 0,
+      "accepted_accuracy": 1.0
+    },
+    "20261004_213227_e473cd01": {
+      "kind": "three_finger_negative",
+      "hand": "left",
+      "samples": 78,
+      "false_commands": 1,
+      "accepted_accuracy": 0.9871794871794872
+    },
+    "20261004_213327_e716ec14": {
+      "kind": "three_finger_negative",
+      "hand": "right",
+      "samples": 77,
+      "false_commands": 0,
+      "accepted_accuracy": 1.0
+    },
+    "20261004_214228_b32c7afd": {
+      "kind": "three_finger_negative",
+      "hand": "left",
+      "samples": 79,
+      "false_commands": 0,
+      "accepted_accuracy": 1.0
+    },
+    "20261004_215459_f2337609": {
+      "kind": "three_finger_negative",
+      "hand": "left",
+      "samples": 81,
+      "false_commands": 0,
+      "accepted_accuracy": 1.0
+    },
+    "20261004_215636_c4ef72cc": {
+      "kind": "three_finger_negative",
+      "hand": "right",
+      "samples": 73,
+      "false_commands": 0,
+      "accepted_accuracy": 1.0
+    }
+  },
+  "offline_replay_false_commands": 0,
+  "local_artifacts_only": true,
+  "live_camera_validation": "pending user test"
+}

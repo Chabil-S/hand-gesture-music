@@ -41,7 +41,7 @@
 
 โมเดลรุ่นแรกเลือก Logistic Regression C=1 จาก validation: train 1,893, validation 633, test 634 เฟรม ชุด test จำแนกถูก 634/634 ในสภาพที่เก็บจากผู้ใช้คนเดียว เฟรมภายในแต่ละช่วงสัมพันธ์กัน จึงไม่ใช่หลักฐานว่าใช้ได้ทุกคนหรือสั่งเพลงจริงถูกทุกครั้ง
 
-ผลลองสดพบว่าโป้ง+ชี้+กลางอาจถูกอ่านเป็น V กำลังแก้ด้วยข้อมูลสามนิ้วเสริม รุ่นทดลองรอบแรกยังผิดใน test จึงยังใช้รุ่นเดิม ดูผลและขั้นตอนใน [บันทึกการแก้สามนิ้ว](docs/THREE_FINGER_REVISION_TH.md) คะแนน test เดิมเป็นผลรุ่นแรก เก็บไว้และไม่ใช้เพื่อเลือกการปรับรุ่นต่อไป
+ผลลองสดพบว่าโป้ง+ชี้+กลางอาจถูกอ่านเป็น V เปิดใช้รุ่นแก้สามนิ้ว Joint Logistic C=1 threshold 0.8 แล้ว ชุด test สามนิ้วหลายมุมใหม่ 233 เฟรมไม่อ่านเป็นคำสั่ง ส่วน replay คลิป test ไม่มีคำสั่งผิด การลองสดรุ่นใหม่นี้ยังต้องทดสอบ ดูผลและขั้นตอนใน [บันทึกการแก้สามนิ้ว](docs/THREE_FINGER_REVISION_TH.md) คะแนน test เดิมเป็นผลรุ่นแรก เก็บไว้และไม่ใช้เพื่อเลือกการปรับรุ่นต่อไป
 
 รายงาน: [ผลโมเดลรุ่นแรก](docs/MODEL_REPORT_V1_TH.md), [ผลตรวจข้อมูล](outputs/DATA_AUDIT_TH.md), [การเชื่อมต่อเครื่องเล่น](outputs/CONNECTION_TEST_TH.md)
 
@@ -51,6 +51,8 @@
 ./.venv/Scripts/python.exe tests/check_collection_storage.py
 ./.venv/Scripts/python.exe tests/check_gesture_gate.py
 ./.venv/Scripts/python.exe tests/check_live_changes.py
+./.venv/Scripts/python.exe tests/check_revision_validation.py
+./.venv/Scripts/python.exe tests/check_joint_features.py
 ```
 
 ทดสอบการเก็บข้อมูล การแยกรอบ การยืนยัน/ปล่อยท่า การติดตามมือ และคิวคำสั่ง ผลเพลงจริงและการใช้ในแสง/มุมใหม่ยังต้องทดลองแยก

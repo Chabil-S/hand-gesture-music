@@ -49,7 +49,7 @@ for directory in sorted((base/'data'/'raw').iterdir()):
                      'counts':[{'split':split,'label':label,'samples':n} for (split,label),n in sorted(count.items())],
                      'detected_handedness':dict(handedness)})
 (base/'data_audit.json').write_text(json.dumps(sessions,ensure_ascii=False,indent=2),encoding='utf-8')
-lines=['# ตรวจข้อมูลท่ามือ','', 'ตรวจเฉพาะความครบและความสอดคล้องของข้อมูล ยังไม่ได้ฝึกหรือประเมินโมเดล','']
+lines=['# ตรวจข้อมูลท่ามือ','', 'รายงานนี้ตรวจเฉพาะความครบและความสอดคล้องของข้อมูล ไม่ใช่ผลประเมินโมเดล','']
 for item in sessions:
     lines += [f'## {item["session_id"]}', '', f'มือที่ผู้ใช้ระบุ: {item["declared_hand"]}',
               f'ข้างจริงที่ผู้ใช้ยืนยันในแชท: {item["verified_actual_hand"] or "รอยืนยัน"} (บันทึกแยกใน hand_verification.json ไม่แก้ข้อมูลเดิม)',
