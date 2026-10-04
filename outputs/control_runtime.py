@@ -4,18 +4,6 @@ import threading
 import time
 import numpy as np
 
-def thumb_is_extended(coords,width,height):
-    """Conservative geometric veto for a V prediction with a raised thumb."""
-    p=np.asarray(coords,dtype=float).reshape(21,3).copy()
-    p[:,1]*=height/width
-    a=p[2]-p[3];b=p[4]-p[3]
-    denominator=np.linalg.norm(a)*np.linalg.norm(b)
-    if denominator<1e-8:return False
-    angle=float(np.degrees(np.arccos(np.clip(np.dot(a,b)/denominator,-1,1))))
-    palm=(np.linalg.norm(p[0]-p[9])+np.linalg.norm(p[5]-p[17]))/2
-    tip=np.linalg.norm(p[4]-p[5]);joint=np.linalg.norm(p[3]-p[5])
-    return bool(angle>=150 and tip>1.15*joint and tip>0.65*palm)
-
 class ActiveHand:
     def __init__(self):self.wrist=None;self.missing_since=None
     def reset(self):self.wrist=None;self.missing_since=None

@@ -14,7 +14,7 @@ from PIL import Image, ImageTk
 from gesture_collector import Collector, FONT
 from gesture_features import features, GestureGate, FEATURE_VERSION
 from media_connection_probe import run
-from control_runtime import ActiveHand,MusicQueue,thumb_is_extended
+from control_runtime import ActiveHand,MusicQueue
 
 BASE=Path(__file__).resolve().parent
 NAMES={'neutral':'ไม่สั่งงาน','next':'ถัดไป','previous':'ก่อนหน้า','toggle':'เล่น / พัก',
@@ -47,8 +47,8 @@ class LiveApp(Collector):
         self.pose=tk.StringVar(value='เปิดกล้องเพื่อลองท่า')
         self.score=tk.StringVar(value='ติดตามมือสั่งงาน • รองรับสองมือในภาพ')
         self.detection=tk.StringVar(value='กล้องยังไม่เปิด')
-        self.mode=tk.StringVar(value='โหมดดูผล • ยังไม่ส่งคำสั่งเพลง')
-        self.feedback=tk.StringVar(value='กำมือ = เล่น/พัก\nสองนิ้ว = ถัดไป\nนิ้วโป้ง = ก่อนหน้า')
+        self.mode=tk.StringVar(value='โหมดดูผล • โมเดล '+directory.name)
+        self.feedback=tk.StringVar(value='กำมือ = เล่น/พัก\nV ชี้–กลาง พับโป้ง = ถัดไป\nนิ้วโป้ง = ก่อนหน้า')
         tk.Label(self.root,text='ควบคุมเพลงด้วยท่าทางมือ',font=(FONT,24,'bold'),bg='#101827',fg='white').pack(anchor='w',padx=28,pady=(20,2))
         tk.Label(self.root,text='ขั้นที่ 3 • ทดลองโมเดลของคุณกับกล้องสด',font=(FONT,13),bg='#101827',fg='#93c5fd').pack(anchor='w',padx=28)
         body=tk.Frame(self.root,bg='#101827'); body.pack(fill='both',expand=True,padx=28,pady=16)
@@ -122,10 +122,6 @@ class LiveApp(Collector):
                         index=int(prob.argmax());prediction['score']=float(prob[index])
                         raw_label=str(self.model.classes_[index])
                         prediction['label']=raw_label if prediction['score']>=self.config['threshold'] else 'uncertain'
-                        # Validation showed the thumb heuristic rejects genuine V poses.
-                        # Leave it disabled; collect real three-finger negatives instead.
-                        prediction['thumb_veto']=False
-                        if prediction['thumb_veto']:prediction['label']='uncertain'
                     except ValueError:pass
                     classified.append(prediction)
                 active,changed,reason=self.hand_selector.select(classified,frame['t'],not self.gate.latched)
@@ -149,9 +145,6 @@ class LiveApp(Collector):
                 self.detection.set('สองมือสั่งต่างกัน • รอให้เหลือท่าคำสั่งเดียว' if reason=='conflict'
                                    else f'พบ {frame["count"]} มือ • รับจากมือกรอบสีเขียว' if active is not None
                                    else 'รอมือสั่งงานกลับมา' if frame['count'] else 'ไม่พบมือ')
-                if active is not None and classified[active].get('thumb_veto'):
-                    self.pose.set('ไม่รับท่าสามนิ้ว')
-                    self.score.set('ท่า V ต้องพับนิ้วโป้ง • ตัวกรองทดลอง')
                 command=self.gate.update(label,frame['t'])
                 if command:
                     if self.armed:

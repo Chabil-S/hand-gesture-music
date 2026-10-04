@@ -2,7 +2,7 @@ import csv,json,sys,time,threading,queue
 from pathlib import Path
 import numpy as np
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'outputs'))
-from control_runtime import ActiveHand,MusicQueue,thumb_is_extended
+from control_runtime import ActiveHand,MusicQueue
 from gesture_features import GestureGate
 
 def hand(x,label):
@@ -39,20 +39,4 @@ dispatcher.submit('cancel_me');dispatcher.cancel_pending();blocked.set()
 results.get(timeout=2)
 assert results.get(timeout=2)[2]=='cancelled' and 'cancel_me' not in calls
 
-# Engineering veto check on train/validation only; never use old test to tune it.
-base=Path(__file__).resolve().parents[1]/'outputs'
-counts={}
-for directory in ((base/'data'/'raw').iterdir() if (base/'data'/'raw').exists() else []):
-    if not directory.is_dir():continue
-    for line in (directory/'clips.jsonl').read_text(encoding='utf-8').splitlines():
-        clip=json.loads(line)
-        if not clip['accepted'] or clip['split']=='test':continue
-        with (directory/clip['csv']).open(encoding='utf-8',newline='') as f:
-            for row in csv.DictReader(f):
-                if row['label']!='next':continue
-                key=directory.name+':'+row['split'];counts.setdefault(key,[0,0]);counts[key][1]+=1
-                coords=[float(row[f'{a}{i}']) for i in range(21) for a in 'xyz']
-                counts[key][0]+=int(thumb_is_extended(coords,int(row['width']),int(row['height'])))
-print('PASS: hand ordering, two-hand conflict, single firing for matching poses, ordered commands, receive/release during wait, pause cancellation')
-print('V-pose frames vetoed / V-pose frames on train and validation:',counts)
-(base/'live_guard_validation.json').write_text(json.dumps(counts,indent=2),encoding='utf-8')
+print('PASS: hand ordering, conflict handling, ordered commands, receive/release during wait, pause cancellation')
