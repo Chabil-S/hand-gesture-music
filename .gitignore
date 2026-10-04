@@ -18,3 +18,5 @@ outputs/live_guard_validation.json
 *.log
 .env
 .env.*
+
+outputs/three_finger_validation_attempt.json

@@ -1,4 +1,5 @@
 """Select models on validation, freeze settings, then evaluate test once."""
+import argparse
 import csv
 import hashlib
 import json
@@ -15,6 +16,7 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 from gesture_features import features, FEATURE_VERSION
+from revision_validation import revision_checks
 
 BASE=Path(__file__).resolve().parent
 LABELS=['neutral','next','previous','toggle']
@@ -24,12 +26,23 @@ def dump(path, value):
     path.write_text(json.dumps(value,ensure_ascii=False,indent=2),encoding='utf-8')
 
 def main():
+    parser=argparse.ArgumentParser()
+    parser.add_argument("--require-three-finger-validation",action="store_true")
+    parser.add_argument("--exclude-session",action="append",default=[],help="Explicitly exclude abandoned sessions; recorded in model provenance")
+    parser.add_argument("--activate",action="store_true",help="Explicitly make a revision the live model after reviewing its report")
+    options=parser.parse_args()
     audit=json.loads((BASE/'data_audit.json').read_text(encoding='utf-8'))
+    excluded=[session for session in audit if session['session_id'] in options.exclude_session]
+    if set(options.exclude_session)-{session['session_id'] for session in audit}:
+        raise RuntimeError('Unknown excluded session')
+    audit=[session for session in audit if session['session_id'] not in options.exclude_session]
     if not audit or any(s['errors'] or not s['complete'] or not s['verified_actual_hand'] for s in audit):
         raise RuntimeError('Data audit incomplete or actual hand unverified')
-    X=[]; y=[]; hand=[]; split=[]; groups=[]; clip_ids=[]; inputs=[]
+    X=[]; y=[]; hand=[]; split=[]; groups=[]; clip_ids=[]; inputs=[]; kinds=[]
     for session in audit:
         directory=BASE/'data'/'raw'/session['session_id']
+        metadata=json.loads((directory/'session.json').read_text(encoding='utf-8'))
+        kind=metadata.get('collection_kind','base_four_classes')
         for line in (directory/'clips.jsonl').read_text(encoding='utf-8').splitlines():
             clip=json.loads(line)
             if not clip['accepted']: continue
@@ -41,9 +54,10 @@ def main():
                 for row in csv.DictReader(file):
                     X.append(features([float(row[f'{axis}{i}']) for i in range(21) for axis in 'xyz'],
                                       int(row['width']),int(row['height'])))
+                    kinds.append(kind)
                     y.append(row['label']); hand.append(session['verified_actual_hand']); split.append(row['split'])
                     groups.append(session['session_id']+':'+row['round_id']); clip_ids.append(row['clip_id'])
-    X=np.asarray(X); y=np.asarray(y); hand=np.asarray(hand); split=np.asarray(split); groups=np.asarray(groups)
+    X=np.asarray(X); y=np.asarray(y); hand=np.asarray(hand); split=np.asarray(split); groups=np.asarray(groups); kinds=np.asarray(kinds)
     for a,b in [('train','validation'),('train','test'),('validation','test')]:
         if set(groups[split==a]) & set(groups[split==b]): raise RuntimeError('Group leakage')
     tr=split=='train'; va=split=='validation'; te=split=='test'
@@ -55,7 +69,17 @@ def main():
         ('RandomForest depth=12',RandomForestClassifier(n_estimators=160,max_depth=12,random_state=42,n_jobs=-1)),
         ('RandomForest full',RandomForestClassifier(n_estimators=160,random_state=42,n_jobs=-1)),
     ]
-    candidates=[]
+    baseline_validation=None
+    if options.require_three_finger_validation and (BASE/'latest_model.json').exists():
+        old_directory=BASE/json.loads((BASE/'latest_model.json').read_text(encoding='utf-8'))['directory']
+        old_config=json.loads((old_directory/'selection_frozen.json').read_text(encoding='utf-8'))
+        old_model=joblib.load(old_directory/'gesture_model.joblib')
+        old_prob=old_model.predict_proba(X[va])
+        old_accepted=np.where(old_prob.max(axis=1)>=old_config['threshold'],
+                              old_model.classes_[old_prob.argmax(axis=1)],'neutral')
+        baseline_validation={'directory':str(old_directory.relative_to(BASE)),
+                             'checks':revision_checks(y[va],old_accepted,hand[va],kinds[va])}
+    candidates=[]; revision_trials=[]
     for name,model in models:
         model.fit(X[tr],y[tr])
         pred=model.predict(X[va])
@@ -65,8 +89,27 @@ def main():
                'validation_accuracy':float(accuracy_score(y[va],pred)),
                'validation_hand_macro_f1':per_hand,'selection_score':float(np.mean(list(per_hand.values())))}
         candidates.append(entry)
+        if options.require_three_finger_validation:
+            probabilities=model.predict_proba(X[va])
+            for threshold in [0.6,0.7,0.8,0.9]:
+                effective=np.where(probabilities.max(axis=1)>=threshold,
+                                   model.classes_[probabilities.argmax(axis=1)],'neutral')
+                checks=revision_checks(y[va],effective,hand[va],kinds[va])
+                per_hand=[f1_score(y[va][hand[va]==h],effective[hand[va]==h],labels=LABELS,
+                                  average='macro',zero_division=0) for h in ['left','right']]
+                revision_trials.append({'model_index':len(candidates)-1,'model':name,
+                                        'threshold':threshold,'selection_score':float(np.mean(per_hand)),
+                                        'checks':checks})
         print(name,entry['selection_score'],flush=True)
     best_index=max(range(len(candidates)),key=lambda i:candidates[i]['selection_score'])
+    selected_revision=None
+    if options.require_three_finger_validation:
+        eligible=[trial for trial in revision_trials if trial['checks']['passed']]
+        if not eligible:
+            dump(BASE/'three_finger_validation_attempt.json',{'trials':revision_trials,'published':False})
+            raise RuntimeError('No candidate passed three-finger validation; current model unchanged, test not evaluated')
+        selected_revision=max(eligible,key=lambda t:t['selection_score'])
+        best_index=selected_revision['model_index']
     name,model=models[best_index]
     probabilities=model.predict_proba(X[va]); classes=model.classes_
     raw_pred=classes[np.argmax(probabilities,axis=1)]; scores=probabilities.max(axis=1)
@@ -78,6 +121,8 @@ def main():
                                  'neutral_false_commands':int(np.sum((y[va]=='neutral') & (effective!='neutral'))),
                                  'command_coverage':float(np.mean(effective[y[va]!='neutral']!='neutral'))})
     chosen=max(threshold_trials,key=lambda t:(t['mean_hand_macro_f1'],-t['neutral_false_commands'],t['command_coverage']))
+    if selected_revision:
+        chosen=next(t for t in threshold_trials if t['threshold']==selected_revision['threshold'])
     stamp=datetime.now(timezone(timedelta(hours=7))).strftime('%Y%m%d_%H%M%S')
     destination=BASE/'models'/stamp
     destination.mkdir(parents=True,exist_ok=False)
@@ -87,16 +132,25 @@ def main():
             'selection':'mean per-hand validation macro-F1; candidate order breaks exact ties',
             'threshold_selection':'validation only','temporal_settings':'engineering defaults; not tuned on test',
             'counts':{s:int(np.sum(split==s)) for s in ['train','validation','test']},'inputs':inputs}
+    config['excluded_sessions']=[{'session_id':session['session_id'],'complete':session['complete'],'reason':'explicit operator exclusion'} for session in excluded]
+    config['baseline_validation']=baseline_validation
+    config['collection_kinds']=sorted(set(kinds.tolist()))
+    config['revision_validation']=selected_revision['checks'] if selected_revision else None
+    if selected_revision:
+        config['selection']='validation-only: pass three-finger/V safety checks, then maximize gated per-hand macro-F1; stable candidate/threshold order breaks ties'
+        config['test_scope']='original base test is a previously evaluated regression set; supplemental three-finger test is new'
     # Persist selection before calculating any test performance.
     dump(destination/'selection_frozen.json',config)
     joblib.dump(model,destination/'gesture_model.joblib')
-    dump(destination/'validation_candidates.json',{'models':candidates,'thresholds':threshold_trials})
-    np.savez_compressed(destination/'derived_features.npz',X=X,y=y,hand=hand,split=split,group=groups)
+    dump(destination/'validation_candidates.json',{'models':candidates,'thresholds':threshold_trials,'revision_trials':revision_trials})
+    np.savez_compressed(destination/'derived_features.npz',X=X,y=y,hand=hand,split=split,group=groups,kind=kinds)
     metrics={}
+    revision_metrics={}
     for partition in ['validation','test']:
         mask=split==partition
         prob=model.predict_proba(X[mask]); pred=model.classes_[prob.argmax(axis=1)]
         gated=np.where(prob.max(axis=1)>=chosen['threshold'],pred,'neutral')
+        revision_metrics[partition]=revision_checks(y[mask],gated,hand[mask],kinds[mask])
         rows={}
         for h in ['all','left','right']:
             sub=np.ones(mask.sum(),dtype=bool) if h=='all' else hand[mask]==h
@@ -109,6 +163,18 @@ def main():
                      'missed_command_frames':int(np.sum((y[mask][sub]!='neutral') & (gated[sub]=='neutral')))}
         metrics[partition]=rows
     dump(destination/'classification_metrics.json',metrics)
+    dump(destination/'three_finger_metrics.json',revision_metrics)
+    session_test={}
+    for session in audit:
+        mask=te & np.char.startswith(groups,session['session_id']+':')
+        if not mask.any():continue
+        probabilities=model.predict_proba(X[mask])
+        accepted=np.where(probabilities.max(axis=1)>=chosen['threshold'],
+                          model.classes_[probabilities.argmax(axis=1)],'neutral')
+        session_test[session['session_id']]={'kind':str(kinds[mask][0]),'hand':session['verified_actual_hand'],
+            'samples':int(mask.sum()),'false_commands':int(np.sum((y[mask]=='neutral') & (accepted!='neutral'))),
+            'accepted_accuracy':float(accuracy_score(y[mask],accepted))}
+    dump(destination/'test_by_session.json',session_test)
     with (destination/'test_predictions.csv').open('x',encoding='utf-8',newline='') as file:
         writer=csv.writer(file); writer.writerow(['hand','group','actual','predicted','score','accepted_label'])
         prob=model.predict_proba(X[te]); pred=model.classes_[prob.argmax(axis=1)]
@@ -139,7 +205,17 @@ def main():
               'ต้องทดสอบสั่งเพลงจริงแยก: แต่ละคำสั่ง มือซ้าย/ขวา ค้างท่า ปล่อยท่า ไม่เห็นมือ และท่าอื่น พร้อมบันทึกคำสั่งผิด/ซ้ำและผลเครื่องเล่น',
               '', 'อ้างอิงวิธีประเมิน: https://scikit-learn.org/stable/modules/cross_validation.html']
     (destination/'MODEL_REPORT_TH.md').write_text('\n'.join(lines)+'\n',encoding='utf-8')
-    dump(BASE/'latest_model.json',{'directory':str(destination.relative_to(BASE))})
+    if selected_revision:
+        with (destination/'MODEL_REPORT_TH.md').open('a',encoding='utf-8') as report:
+            report.write('\n## การแก้ท่าสามนิ้ว\n\nเลือกโมเดลและเกณฑ์คะแนนจาก validation เท่านั้น ต้องไม่มีเฟรมสามนิ้วสั่งงานผิดและรับ V อย่างน้อย 95% แยกข้าง ก่อนเปิด test\n')
+            report.write('ชุด test ท่าเดิมเคยประเมินแล้ว จึงเป็นการตรวจการถดถอย ส่วน test สามนิ้วเป็นชุดใหม่ ไม่ใช่ชุดทดสอบใหม่ของทุกท่า\n')
+            for partition,checks in revision_metrics.items():
+                for h,r in checks['per_hand'].items():
+                    report.write(f"{partition} {h}: สามนิ้วสั่งผิด {r['three_finger_false_commands']}/{r['three_finger_samples']} เฟรม; รับ V {r['v_accepted']}/{r['v_samples']} เฟรม\n")
+    if not selected_revision or options.activate:
+        dump(BASE/'latest_model.json',{'directory':str(destination.relative_to(BASE))})
+    else:
+        print('Revision saved for review; live model unchanged.',flush=True)
     print(json.dumps({'selected':name,'threshold':chosen['threshold'],'counts':config['counts'],
                       'test':{h:{k:v for k,v in r.items() if k in ['accuracy','macro_f1','samples','gated_accuracy','neutral_false_commands','missed_command_frames']} for h,r in metrics['test'].items()},
                       'directory':str(destination)},ensure_ascii=False,indent=2))
