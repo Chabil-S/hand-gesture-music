@@ -1,0 +1,20 @@
+# Local dependencies and scratch files
+.venv/
+work/
+__pycache__/
+*.py[cod]
+tests/*storage_check*/
+
+# User landmarks, per-session metadata, models and media remain local
+outputs/data/
+outputs/models/
+outputs/assets/*.task
+outputs/assets/*.zip
+outputs/hand_verification.json
+outputs/latest_model.json
+outputs/*events.jsonl
+outputs/data_audit.json
+outputs/live_guard_validation.json
+*.log
+.env
+.env.*
