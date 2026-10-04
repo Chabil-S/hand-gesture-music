@@ -47,3 +47,24 @@ class ActiveHand:
         self.missing_since=None
         return index,changed,'selected'
 
+class MusicQueue:
+    """One worker preserves order; pausing invalidates unsent commands."""
+    def __init__(self,runner,results):
+        self.runner=runner;self.results=results;self.pending=queue.Queue(maxsize=3)
+        self.epoch=0
+        threading.Thread(target=self.worker,daemon=True).start()
+    def cancel_pending(self):self.epoch+=1
+    def submit(self,action):
+        self.pending.put_nowait((self.epoch,action,time.monotonic()))
+    def worker(self):
+        while True:
+            epoch,action,submitted=self.pending.get()
+            if epoch!=self.epoch:
+                self.results.put((action,None,'cancelled',epoch));continue
+            started=time.monotonic()
+            try:
+                result=self.runner(action)
+                result['queue_wait_seconds']=started-submitted
+                result['request_seconds']=time.monotonic()-started
+                self.results.put((action,result,None,epoch))
+            except Exception as error:self.results.put((action,None,str(error),epoch))
