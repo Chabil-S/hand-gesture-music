@@ -24,6 +24,8 @@
 
 ดู [คู่มือกล้องสด](outputs/LIVE_GUIDE_TH.md) และ [การปรับจากผลลองจริง](outputs/LIVE_FIXES_TH.md)
 
+หาก Apple Music โหลด Home ไม่ได้และข้ามเพลงเอง ดู [ผลตรวจและการกู้ Apple Music](docs/APPLE_MUSIC_RECOVERY_TH.md)
+
 ## ติดตั้งบนเครื่องใหม่
 
 ใช้ Windows และ Python 3.11 x64 เปิด PowerShell ที่โฟลเดอร์ repository แล้วเรียก `./setup.ps1` สคริปต์จะสร้าง `.venv` ติดตั้งรุ่นตาม `requirements.txt` และดาวน์โหลดโมเดลสกัดมือจากแหล่งทางการของ MediaPipe โดยตรวจ SHA-256 โมเดลนี้เป็นตัวสกัดตำแหน่งมือ ไม่ใช่ตัวจำแนกท่าคำสั่งที่ฝึกเอง
