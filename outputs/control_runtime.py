@@ -1,0 +1,49 @@
+"""Live control policies independent of UI and of the trained classifier."""
+import queue
+import threading
+import time
+import numpy as np
+
+def thumb_is_extended(coords,width,height):
+    """Conservative geometric veto for a V prediction with a raised thumb."""
+    p=np.asarray(coords,dtype=float).reshape(21,3).copy()
+    p[:,1]*=height/width
+    a=p[2]-p[3];b=p[4]-p[3]
+    denominator=np.linalg.norm(a)*np.linalg.norm(b)
+    if denominator<1e-8:return False
+    angle=float(np.degrees(np.arccos(np.clip(np.dot(a,b)/denominator,-1,1))))
+    palm=(np.linalg.norm(p[0]-p[9])+np.linalg.norm(p[5]-p[17]))/2
+    tip=np.linalg.norm(p[4]-p[5]);joint=np.linalg.norm(p[3]-p[5])
+    return bool(angle>=150 and tip>1.15*joint and tip>0.65*palm)
+
+class ActiveHand:
+    def __init__(self):self.wrist=None;self.missing_since=None
+    def reset(self):self.wrist=None;self.missing_since=None
+    def select(self,hands,t,can_switch):
+        commands=[i for i,h in enumerate(hands) if h['label'] in ('toggle','next','previous')]
+        if len({hands[i]['label'] for i in commands})>1:
+            return None,False,'conflict'
+        if not hands:
+            if self.missing_since is None:self.missing_since=t
+            return None,False,'no_hand'
+        def largest(indices):
+            return max(indices,key=lambda i:np.linalg.norm(np.asarray(hands[i]['coords']).reshape(21,3)[0]-np.asarray(hands[i]['coords']).reshape(21,3)[9]))
+        changed=False
+        if self.wrist is None:
+            index=commands[0] if len(commands)==1 else largest(range(len(hands)))
+            changed=True
+        else:
+            distances=[np.linalg.norm(np.asarray(h['coords'][:2])-self.wrist) for h in hands]
+            index=int(np.argmin(distances))
+            if distances[index]>0.25:
+                if self.missing_since is None:self.missing_since=t
+                if not can_switch or t-self.missing_since<0.35:
+                    return None,False,'active_missing'
+                index=commands[0] if len(commands)==1 else largest(range(len(hands)))
+                changed=True
+            elif can_switch and hands[index]['label']=='neutral' and len(commands)==1 and commands[0]!=index:
+                index=commands[0];changed=True
+        self.wrist=np.asarray(hands[index]['coords'][:2]).copy()
+        self.missing_since=None
+        return index,changed,'selected'
+
