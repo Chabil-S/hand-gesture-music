@@ -6,6 +6,7 @@ import queue
 import threading
 import time
 import uuid
+import argparse
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 import tkinter as tk
@@ -62,15 +63,22 @@ def phase_at(elapsed):
     return 'done',None
 
 class ComparisonApp(Collector):
-    def __init__(self):
+    def __init__(self,candidate=None):
         self.root=tk.Tk(); self.root.title('Hand Gesture Music — Paired Comparison')
         self.root.geometry('1220x800'); self.root.minsize(1080,740); self.root.configure(bg='#101827')
         self.frames=queue.Queue(maxsize=1); self.stop=threading.Event(); self.camera_running=False
         self.index=0; self.running=False; self.started=None; self.session=None; self.stream=None
         self.trial_rows=[]; self.manifest=None; self.last_frame=None; self.stale_sent=False; self.trial_file=None
         self.branches={}; self.cards={}; self.model_info={}
+        self.variants=list(VARIANTS)
+        if candidate:
+            if candidate=='latest-diagnostic':
+                candidate=Path(json.loads((BASE/'data/latest_diagnostic.json').read_text(encoding='utf-8'))['directory']).name
+            if Path(candidate).name!=candidate:raise ValueError('Candidate must be a model directory name')
+            cfg=json.loads((BASE/'models'/candidate/'selection_frozen.json').read_text(encoding='utf-8'))
+            self.variants[2]=('candidate','รุ่นทดลอง • '+f'{cfg["threshold"]:.2f}',candidate,cfg['threshold'])
         loaded={}
-        for key,title,stamp,threshold in VARIANTS:
+        for key,title,stamp,threshold in self.variants:
             directory=BASE/'models'/stamp
             if stamp not in loaded: loaded[stamp]=joblib.load(directory/'gesture_model.joblib')
             config=json.loads((directory/'selection_frozen.json').read_text(encoding='utf-8'))
@@ -78,8 +86,10 @@ class ComparisonApp(Collector):
             self.model_info[key]={'directory':stamp,'threshold':threshold,
                 'sha256':hashlib.sha256((directory/'gesture_model.joblib').read_bytes()).hexdigest(),
                 'gate':{k:config[k] for k in ('hold_seconds','release_seconds','max_frame_gap_seconds')}}
+            self.model_info[key]['purpose']=config.get('purpose','saved trained model')
+            self.model_info[key]['full_validation_passed']=config.get('full_validation_passed')
         tk.Label(self.root,text='เทียบสองรุ่นจากมือชุดเดียวกัน',font=(FONT,24,'bold'),bg='#101827',fg='white').pack(anchor='w',padx=24,pady=(16,4))
-        tk.Label(self.root,text='คำสั่งจำลอง • บันทึกพิกัดในเครื่อง • ไม่เปลี่ยนเพลง • ใช้ท่าและมุมแบบที่คุณใช้งานจริง',font=(FONT,12),bg='#101827',fg='#93c5fd').pack(anchor='w',padx=24)
+        tk.Label(self.root,text='รุ่นทดลองยังไม่ผ่านเกณฑ์ครบ • เปรียบเทียบอย่างเดียว ไม่เปลี่ยนเพลง' if candidate else 'คำสั่งจำลอง • บันทึกพิกัดในเครื่อง • ไม่เปลี่ยนเพลง • ใช้ท่าและมุมแบบที่คุณใช้งานจริง',font=(FONT,12),bg='#101827',fg='#93c5fd').pack(anchor='w',padx=24)
         body=tk.Frame(self.root,bg='#101827'); body.pack(fill='both',expand=True,padx=24,pady=12)
         left=tk.Frame(body,bg='#101827'); left.pack(side='left',fill='both',expand=True,padx=(0,20))
         self.video=tk.Label(left,text='เปิดกล้อง แล้วกดเริ่มช่วงทดสอบ\nทำตามข้อความนับถอยหลัง',font=(FONT,17),bg='#1e293b',fg='white'); self.video.pack(fill='both',expand=True)
@@ -90,7 +100,7 @@ class ComparisonApp(Collector):
         self.progress=tk.StringVar(value='ยังไม่บันทึก'); self.feedback=tk.StringVar(value='ปิดหน้าควบคุมเพลงเดิมก่อนเปิดกล้อง')
         for variable,size,color in [(self.instruction,17,'white'),(self.timer,15,'#67e8f9'),(self.progress,11,'#cbd5e1')]:
             tk.Label(right,textvariable=variable,font=(FONT,size),bg='#1e293b',fg=color,wraplength=360,justify='left').pack(anchor='w',pady=(0,10))
-        for key,title,_,_ in VARIANTS:
+        for key,title,_,_ in self.variants:
             tk.Label(right,text=title,font=(FONT,13,'bold'),bg='#1e293b',fg='#93c5fd').pack(anchor='w')
             variable=tk.StringVar(value='รอภาพกล้อง'); self.cards[key]=variable
             tk.Label(right,textvariable=variable,font=(FONT,12),bg='#1e293b',fg='white',wraplength=360,justify='left').pack(anchor='w',pady=(0,12))
@@ -176,4 +186,8 @@ class ComparisonApp(Collector):
     def close(self):
         self.finish(False); self.stop.set(); self.root.destroy()
 
-if __name__=='__main__': ComparisonApp().root.mainloop()
+if __name__=='__main__':
+    parser=argparse.ArgumentParser()
+    parser.add_argument('--candidate',help='Saved model directory name or latest-diagnostic; camera comparison only')
+    args=parser.parse_args()
+    ComparisonApp(args.candidate).root.mainloop()

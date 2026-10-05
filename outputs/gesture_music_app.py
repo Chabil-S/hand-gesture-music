@@ -25,6 +25,8 @@ class LiveApp(Collector):
     def __init__(self):
         directory=BASE/json.loads((BASE/'latest_model.json').read_text(encoding='utf-8'))['directory']
         self.config=json.loads((directory/'selection_frozen.json').read_text(encoding='utf-8'))
+        if self.config.get('eligible_for_activation') is False:
+            raise RuntimeError('รุ่นนี้ใช้เปรียบเทียบกล้องเท่านั้น ยังไม่ผ่านเกณฑ์สำหรับควบคุมเพลง')
         if self.config['feature_version']!=FEATURE_VERSION: raise RuntimeError('Feature version mismatch')
         self.model=joblib.load(directory/'gesture_model.joblib')
         self.gate=GestureGate(self.config['hold_seconds'],self.config['release_seconds'],self.config['max_frame_gap_seconds'])
