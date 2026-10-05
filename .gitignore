@@ -22,3 +22,6 @@ outputs/live_guard_validation.json
 outputs/three_finger_validation_attempt.json
 
 outputs/evaluation_history.json
+
+# Private weighting experiment inputs and results
+outputs/weighted_experiments/
