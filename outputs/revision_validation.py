@@ -73,19 +73,22 @@ def revision_checks(actual, accepted, hands, kinds, groups=None, timestamps=None
     # Temporal checks match the unchanged live gate; frame errors remain reported.
 
     if temporal:
-        passed=all(r['three_finger_clips']>0 and r['three_finger_command_events']==0
+        event_integrity_passed=all(r['three_finger_clips']>0 and r['three_finger_command_events']==0
                    and r['neutral_clips']>0 and r['neutral_command_events']==0
                    and r['neutral_samples']>0 and r['neutral_accepted']/r['neutral_samples']>=0.95
                    and r['release_pairs']>0 and r['release_pairs_passed']==r['release_pairs']
-                   and all(c['samples']>0 and c['accepted']/c['samples']>=.95
-                           and c['clips']>0 and c['confirmed_clips']==c['clips']
-                           and len(c['first_command_delays'])==c['clips']
-                           and max(c['first_command_delays'])<=1.5 for c in r['commands'].values())
+                   and all(c['clips']>0 and c['confirmed_clips']==c['clips']
+                           and len(c['first_command_delays'])==c['clips'] for c in r['commands'].values())
                    for r in result.values())
+        temporal_passed=event_integrity_passed and all(max(c['first_command_delays'])<=1.5
+                    for r in result.values() for c in r['commands'].values())
+        passed=temporal_passed and all(c['samples']>0 and c['accepted']/c['samples']>=.95
+                    for r in result.values() for c in r['commands'].values())
         rule='both hands: zero three-finger/neutral command events; >=95% accepted recall per command and base neutral; exactly one correct event per command clip within 1.5s of first frame; all measured-neutral release joins produce exactly two correct commands; unchanged gate'
     else:
         passed=all(r['three_finger_samples']>0 and r['three_finger_false_commands']==0
                    and r['v_samples']>0 and r['v_accepted']/r['v_samples']>=0.95
                    for r in result.values())
         rule='zero three-finger false-command frames and >=95% V recall on validation for each hand'
-    return {'passed':passed,'per_hand':result,'rule':rule}
+    return {'passed':passed,'event_integrity_passed':event_integrity_passed if temporal else None,
+            'temporal_passed':temporal_passed if temporal else None,'per_hand':result,'rule':rule}

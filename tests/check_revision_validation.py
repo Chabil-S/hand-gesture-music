@@ -45,3 +45,20 @@ print('PASS: all commands and neutral release required, held-thumb repeats rejec
 runtime=[('uncertain' if a=='neutral' and k=='base_four_classes' else b) for a,b,k in zip(actual,accepted,kinds)]
 assert not revision_checks(actual,accepted,hands,kinds,groups,times,runtime)['passed']
 print('PASS: mapping uncertain to neutral for classification metrics cannot fake a release')
+
+aa=[];ee=[];hh=[];kk=[];gg=[];tt=[];rr=[]
+for h in ('left','right'):
+    for kind,label in [('three_finger_negative','neutral')]+[('base_four_classes',x) for x in ('next','previous','toggle','neutral')]:
+        for i in range(21):
+            degraded=h=='right' and label=='previous' and i in (1,2)
+            aa.append(label);ee.append('neutral' if degraded else label);rr.append('uncertain' if degraded else label)
+            hh.append(h);kk.append(kind);gg.append(h+kind+label);tt.append(i*.15)
+result=revision_checks(aa,ee,hh,kk,gg,tt,rr)
+assert result['temporal_passed'] and not result['passed']
+print('PASS: temporal-safe diagnosis remains distinct from full acceptance; low frame recall still fails')
+
+rr_late=[('uncertain' if h=='right' and a=='previous' and t<1.5 else r) for a,h,t,r in zip(aa,hh,tt,rr)]
+ee_late=[('neutral' if r=='uncertain' else r) for r in rr_late]
+late=revision_checks(aa,ee_late,hh,kk,gg,tt,rr_late)
+assert late['event_integrity_passed'] and not late['temporal_passed'] and not late['passed']
+print('PASS: exact event counts with slow confirmation do not pass the latency target')

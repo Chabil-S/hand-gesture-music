@@ -34,7 +34,9 @@ def main():
     parser.add_argument("--require-three-finger-validation",action="store_true")
     parser.add_argument("--exclude-session",action="append",default=[],help="Explicitly exclude abandoned sessions; recorded in model provenance")
     parser.add_argument("--activate",action="store_true",help="Explicitly make a revision the live model after reviewing its report")
+    parser.add_argument('--diagnostic-only',action='store_true',help='Save an event-integrity candidate for diagnosis even if latency/frame targets fail; never evaluate test or activate')
     options=parser.parse_args()
+    if options.diagnostic_only and options.activate:parser.error('Diagnostic candidates cannot be activated')
     reviews=load_reviews(BASE/'data'/'label_review.json')
     excluded_clips=[]
     history_path=BASE/'evaluation_history.json'
@@ -145,12 +147,39 @@ def main():
     best_index=max(range(len(candidates)),key=lambda i:candidates[i]['selection_score'])
     selected_revision=None
     if require_revision:
+        if options.diagnostic_only:
+            candidates_for_review=[t for t in revision_trials if t['checks']['event_integrity_passed']]
+            if not candidates_for_review:
+                dump(BASE/'three_finger_validation_attempt.json',{'trials':revision_trials,'published':False,'excluded_clips':excluded_clips})
+                raise RuntimeError('No event-integrity diagnostic candidate; live model unchanged, test not evaluated')
+            choice=max(candidates_for_review,key=lambda t:t['selection_score'])
+            name,model=models[choice['model_index']]
+            stamp=datetime.now(timezone(timedelta(hours=7))).strftime('%Y%m%d_%H%M%S')
+            destination=BASE/'models'/stamp;destination.mkdir(parents=True,exist_ok=False)
+            config={'selected_model':name,'feature_version':FEATURE_VERSION,'threshold':choice['threshold'],
+                'hold_seconds':.6,'release_seconds':.35,'max_frame_gap_seconds':.3,
+                'purpose':'validation-only diagnostic candidate; no music activation',
+                'eligible_for_activation':False,'full_validation_passed':choice['checks']['passed'],
+                'revision_validation':choice['checks'],'trained_on':'train only',
+                'selection':'validation-only correct event counts, negatives and release joins first, then gated per-hand macro-F1; strict latency and frame-recall acceptance remain mandatory for activation',
+                'test_evaluated':False,'counts':{s:int(np.sum(split==s)) for s in ('train','validation','test')},
+                'inputs':inputs,'excluded_clips':excluded_clips,
+                'excluded_sessions':options.exclude_session,'sklearn_version':sklearn.__version__}
+            dump(destination/'selection_frozen.json',config)
+            joblib.dump(model,destination/'gesture_model.joblib')
+            dump(destination/'validation_candidates.json',{'models':candidates,'revision_trials':revision_trials})
+            dump(BASE/'data'/'latest_diagnostic.json',{'directory':str(destination.relative_to(BASE))})
+            print(json.dumps({'diagnostic':True,'directory':str(destination),'model':name,'threshold':choice['threshold'],
+                'full_validation_passed':choice['checks']['passed'],'checks':choice['checks'],
+                'test_evaluated':False,'activated':False},ensure_ascii=False,indent=2))
+            return
         eligible=[trial for trial in revision_trials if trial['checks']['passed']]
         if not eligible:
             dump(BASE/'three_finger_validation_attempt.json',{'trials':revision_trials,'published':False,'excluded_clips':excluded_clips})
             raise RuntimeError('No candidate passed all-command/three-finger validation; current model unchanged, test not evaluated')
         selected_revision=max(eligible,key=lambda t:t['selection_score'])
         best_index=selected_revision['model_index']
+    if options.diagnostic_only:raise RuntimeError('Diagnostic-only requires revision validation data')
     name,model=models[best_index]
     probabilities=model.predict_proba(X[va]); classes=model.classes_
     raw_pred=classes[np.argmax(probabilities,axis=1)]; scores=probabilities.max(axis=1)
