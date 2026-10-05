@@ -97,7 +97,6 @@ class MusicUI:
             button = SoftButton(nav, text, lambda k=key:self.show(k), width=137)
             button.pack(fill='x',padx=14,pady=4)
             self.nav_buttons[key]=button
-        self.label(nav, 'Merino / Rock Blue\nVenice Blue', 9, MUTED).pack(side='bottom',anchor='w',padx=18,pady=18)
         self.label(nav, self.status, 10, MUTED, wrap=130).pack(side='bottom',anchor='w',padx=18,pady=12)
         tk.Frame(body,bg=LINE,width=1).pack(side='left',fill='y')
         self.content = tk.Frame(body,bg=CREAM)
