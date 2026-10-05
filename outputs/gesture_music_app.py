@@ -47,7 +47,9 @@ class LiveApp(Collector):
         self.root.minsize(1000,650)
         self.root.configure(bg='#101827')
         self.pose=tk.StringVar(value='เปิดกล้องเพื่อลองท่า')
-        self.score=tk.StringVar(value='ติดตามมือสั่งงาน • รองรับสองมือในภาพ')
+        target=self.config.get('acceptance_policy',{}).get('minimum_command_recall')
+        policy_text=f' • เป้าหมายประเมินรุ่น {target:.0%}' if target is not None else ''
+        self.score=tk.StringVar(value=f'คะแนนขั้นต่ำรับท่า {self.config["threshold"]:.0%}'+policy_text)
         self.detection=tk.StringVar(value='กล้องยังไม่เปิด')
         self.mode=tk.StringVar(value='โหมดดูผล • โมเดล '+directory.name)
         self.feedback=tk.StringVar(value='กำมือ = เล่น/พัก\nV ชี้–กลาง พับโป้ง = ถัดไป\nนิ้วโป้ง = ก่อนหน้า')
@@ -143,7 +145,9 @@ class LiveApp(Collector):
                 self.photo=ImageTk.PhotoImage(picture);self.video.configure(image=self.photo,text='')
                 self.control_button.configure(state='normal')
                 self.pose.set(NAMES[label])
-                self.score.set(f'คะแนนโมเดล {score:.2f} • เกณฑ์ {self.config["threshold"]:.2f}' if score else 'ยังไม่มีพิกัดมือที่ใช้จำแนกได้')
+                target=self.config.get('acceptance_policy',{}).get('minimum_command_recall')
+                policy_text=f' • เป้าหมายประเมินรุ่น {target:.0%}' if target is not None else ''
+                self.score.set((f'คะแนนโมเดล {score:.2f} • คะแนนขั้นต่ำรับท่า {self.config["threshold"]:.0%}' if score else 'ยังไม่มีพิกัดมือที่ใช้จำแนกได้')+policy_text)
                 self.detection.set('สองมือสั่งต่างกัน • รอให้เหลือท่าคำสั่งเดียว' if reason=='conflict'
                                    else f'พบ {frame["count"]} มือ • รับจากมือกรอบสีเขียว' if active is not None
                                    else 'รอมือสั่งงานกลับมา' if frame['count'] else 'ไม่พบมือ')
