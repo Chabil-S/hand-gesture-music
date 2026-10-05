@@ -16,13 +16,32 @@ print('PASS: revision requires both hands, new negatives, no false commands, and
 
 actual=[];accepted=[];hands=[];kinds=[];groups=[];times=[]
 for hand in ('left','right'):
-    for kind,label in [('three_finger_negative','neutral'),('base_four_classes','next')]:
+    for kind,label in [('three_finger_negative','neutral')]+[('base_four_classes',x) for x in ('next','previous','toggle','neutral')]:
         for i in range(7):
-            actual.append(label);accepted.append('next' if label=='next' or i in (1,2) else 'neutral')
-            hands.append(hand);kinds.append(kind);groups.append(hand+':'+kind);times.append(i*.15)
+            actual.append(label);accepted.append('next' if kind=='three_finger_negative' and i in (1,2) else label)
+            hands.append(hand);kinds.append(kind);groups.append(hand+':'+kind+':'+label);times.append(i*.15)
 check=revision_checks(actual,accepted,hands,kinds,groups,times)
 assert check['passed']
 assert all(r['three_finger_false_commands']==2 and r['three_finger_command_events']==0 for r in check['per_hand'].values())
 assert not revision_checks(actual,['next']*len(actual),hands,kinds,groups,times)['passed']
 assert not revision_checks(actual,['neutral']*len(actual),hands,kinds,groups,times)['passed']
 print('PASS: brief frame mistakes do not count as commands; held three-finger errors and missed V clips fail')
+
+# Correct-looking aggregate counts must not hide duplicates during a held thumb.
+duplicate_actual=[];duplicate_runtime=[];duplicate_hands=[];duplicate_kinds=[];duplicate_groups=[];duplicate_times=[]
+for a,b,h,k,g,t in zip(actual,accepted,hands,kinds,groups,times):
+    duplicate_actual.append(a);duplicate_runtime.append(b);duplicate_hands.append(h);duplicate_kinds.append(k);duplicate_groups.append(g);duplicate_times.append(t)
+    if g=='right:base_four_classes:previous' and t>.89:
+        for j in range(1,30):
+            duplicate_actual.append(a);duplicate_runtime.append('neutral' if j in (1,2,3,4) else a)
+            duplicate_hands.append(h);duplicate_kinds.append(k);duplicate_groups.append(g);duplicate_times.append(t+j*.15)
+assert not revision_checks(duplicate_actual,duplicate_runtime,duplicate_hands,duplicate_kinds,duplicate_groups,duplicate_times)['passed']
+# Missing thumb/toggle data cannot pass the new temporal acceptance rule.
+indices=[i for i,a in enumerate(actual) if a not in ('previous','toggle')]
+assert not revision_checks(*[[x[i] for i in indices] for x in (actual,accepted,hands,kinds,groups,times)])['passed']
+print('PASS: all commands and neutral release required, held-thumb repeats rejected')
+
+# A score-rejected neutral is uncertain at runtime and cannot release a latch.
+runtime=[('uncertain' if a=='neutral' and k=='base_four_classes' else b) for a,b,k in zip(actual,accepted,kinds)]
+assert not revision_checks(actual,accepted,hands,kinds,groups,times,runtime)['passed']
+print('PASS: mapping uncertain to neutral for classification metrics cannot fake a release')
