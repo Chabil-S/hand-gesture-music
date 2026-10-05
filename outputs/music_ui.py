@@ -93,6 +93,62 @@ class SoftButton(tk.Canvas):
         self.create_text(w/2+(10 if icon else 0),22,text=self.text,fill=text,font=(FONT,12))
 
 
+class NumberField(tk.Canvas):
+    """Rounded surface with a native, selectable text entry inside."""
+    def __init__(self,parent,variable,width=150,unit='',large=False):
+        super().__init__(parent,width=width,height=52,bg=parent.cget('bg'),highlightthickness=0)
+        self.unit=unit
+        self.entry=tk.Entry(self,textvariable=variable,font=(FONT,20 if large else 15,'bold' if large else 'normal'),
+                            bg='#FCF8EF',fg=BLUE,insertbackground=BLUE,bd=0,highlightthickness=0,relief='flat')
+        self.bind('<Configure>',lambda e:self.draw())
+        self.entry.bind('<FocusIn>',lambda e:self.draw())
+        self.entry.bind('<FocusOut>',lambda e:self.draw())
+        self.draw()
+
+    def draw(self):
+        self.delete('all')
+        w=max(40,self.winfo_width() if self.winfo_width()>1 else int(self.cget('width')))
+        self.create_polygon(14,2,w-14,2,w-2,2,w-2,14,w-2,38,w-2,50,w-14,50,
+                            14,50,2,50,2,38,2,14,2,2,smooth=True,fill='#FCF8EF',
+                            outline=BLUE if self.entry.focus_get()==self.entry else SKY,width=1)
+        self.entry.place(x=15,y=8,width=max(20,w-30-(28 if self.unit else 0)),height=36)
+        if self.unit:self.create_text(w-22,27,text=self.unit,fill=MUTED,font=(FONT,12))
+
+
+class ModernSlider(tk.Canvas):
+    """Thin filled track with a round thumb; pointer and keyboard input."""
+    def __init__(self,parent,command):
+        super().__init__(parent,height=42,bg=parent.cget('bg'),highlightthickness=0,takefocus=1)
+        self.command=command;self.value=95.0
+        self.bind('<Configure>',lambda e:self.draw())
+        self.bind('<Button-1>',self.drag);self.bind('<B1-Motion>',self.drag)
+        self.bind('<Left>',lambda e:self.change(self.value-1))
+        self.bind('<Right>',lambda e:self.change(self.value+1))
+        self.bind('<Home>',lambda e:self.change(1));self.bind('<End>',lambda e:self.change(100))
+        self.bind('<FocusIn>',lambda e:self.draw());self.bind('<FocusOut>',lambda e:self.draw())
+
+    def get(self):return self.value
+
+    def set(self,value):
+        self.value=min(100,max(1,float(value)));self.draw()
+
+    def change(self,value):
+        self.set(value);self.command(self.value)
+
+    def drag(self,event):
+        self.focus_set()
+        ratio=(event.x-14)/max(1,self.winfo_width()-28)
+        self.change(round(1+99*ratio))
+
+    def draw(self):
+        self.delete('all');width=max(30,self.winfo_width())
+        x=14+(width-28)*(self.value-1)/99
+        self.create_line(14,21,width-14,21,fill=SOFT,width=7,capstyle='round')
+        self.create_line(14,21,x,21,fill=BLUE,width=7,capstyle='round')
+        if self.focus_get()==self:self.create_oval(x-13,8,x+13,34,outline=SKY,width=2)
+        self.create_oval(x-9,12,x+9,30,fill=BLUE,outline=CREAM,width=3)
+
+
 def time_text(seconds):
     seconds = max(0, int(seconds))
     return f'{seconds//60}:{seconds%60:02d}'
@@ -265,19 +321,22 @@ class MusicUI:
         form=tk.Frame(page,bg=CREAM);form.pack(pady=6,fill='x',padx=60)
         def entry(parent,key,width=12):
             value=tk.StringVar();self.settings_values[key]=value
-            widget=tk.Entry(parent,textvariable=value,font=(FONT,13),bg=CREAM,fg=INK,insertbackground=BLUE,
-                            relief='flat',bd=0,highlightthickness=1,highlightbackground=SKY,
-                            highlightcolor=BLUE,width=width)
+            widget=NumberField(parent,value,width=width*12+30,unit='%' if key=='threshold' else '',large=key=='threshold')
             return widget
         row=tk.Frame(form,bg=CREAM);row.pack(fill='x')
         self.label(row,'คะแนนขั้นต่ำรับท่า (%)',14,bold=True).pack(side='left')
-        entry(row,'threshold',7).pack(side='right',ipady=7)
+        entry(row,'threshold',7).pack(side='right')
         self.label(form,'สูงขึ้น: รับเฉพาะท่าที่มั่นใจมากขึ้น · ต่ำลง: รับท่าได้ง่ายขึ้น',10,MUTED).pack(anchor='w',pady=10)
-        slider=tk.Scale(form,from_=1,to=100,orient='horizontal',showvalue=False,resolution=1,
-                        bg=CREAM,troughcolor=SOFT,activebackground=SKY,highlightthickness=0,bd=0,
-                        sliderlength=22,width=9,command=lambda v:self.settings_values['threshold'].set(f'{float(v):g}'))
-        slider.pack(fill='x',pady=10)
+        slider=ModernSlider(form,command=lambda v:self.settings_values['threshold'].set(f'{float(v):g}'))
+        slider.pack(fill='x',pady=(2,0))
         self.threshold_slider=slider
+        ends=tk.Frame(form,bg=CREAM);ends.pack(fill='x')
+        self.label(ends,'รับง่ายขึ้น',11,MUTED).pack(side='left')
+        self.label(ends,'เข้มงวดขึ้น',11,MUTED).pack(side='right')
+        def sync_entry(*args):
+            try:self.sync_slider(float(self.settings_values['threshold'].get()))
+            except ValueError:pass
+        self.settings_values['threshold'].trace_add('write',sync_entry)
         tk.Frame(form,bg=LINE,height=1).pack(fill='x',pady=14)
         self.label(form,'จังหวะการออกคำสั่ง',14,bold=True).pack(anchor='w',pady=(0,12))
         timing=tk.Frame(form,bg=CREAM);timing.pack(fill='x')
@@ -285,12 +344,12 @@ class MusicUI:
                                    ('release_seconds','เวลาปล่อยมือ','วินาที · เว้นก่อนรับท่าใหม่')]:
             column=tk.Frame(timing,bg=CREAM);column.pack(side='left',fill='x',expand=True,padx=(0,16))
             self.label(column,title,12).pack(anchor='w')
-            entry(column,key,18).pack(fill='x',ipady=7,pady=8)
+            entry(column,key,18).pack(fill='x',pady=8)
             self.label(column,help_text,10,MUTED).pack(anchor='w')
         advanced=tk.Frame(form,bg=CREAM)
         row=tk.Frame(advanced,bg=CREAM);row.pack(fill='x',pady=8)
         self.label(row,'ช่วงภาพขาดที่ยอมรับ (วินาที)',11).pack(side='left')
-        entry(row,'max_frame_gap_seconds',9).pack(side='right',ipady=5)
+        entry(row,'max_frame_gap_seconds',9).pack(side='right')
         self.label(advanced,'เว้นเกินนี้จะเริ่มนับเวลาค้างท่าใหม่',10,MUTED).pack(anchor='w')
         def toggle_advanced():
             if advanced.winfo_manager():advanced.pack_forget()
@@ -323,10 +382,7 @@ class MusicUI:
         self.sync_slider(self.app.config['threshold']*100)
 
     def sync_slider(self,value):
-        command=self.threshold_slider.cget('command')
-        self.threshold_slider.configure(command='')
         self.threshold_slider.set(value)
-        self.threshold_slider.configure(command=command)
 
     def restore_settings(self):
         for key,value in self.settings_values.items():
