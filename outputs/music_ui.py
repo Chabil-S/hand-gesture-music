@@ -131,7 +131,7 @@ class MusicUI:
         row=tk.Frame(page,bg=CREAM);row.pack(fill='x',pady=(0,18))
         left=tk.Frame(row,bg=CREAM);left.pack(side='left')
         self.label(left,eyebrow,9,MUTED).pack(anchor='w')
-        self.label(left,title,22,bold=True).pack(anchor='w')
+        if title:self.label(left,title,22,bold=True).pack(anchor='w')
         self.label(row,self.app.mode,10,MUTED,wrap=230).pack(side='right')
 
     def camera_box(self, parent, small=False):
@@ -189,7 +189,7 @@ class MusicUI:
         SoftButton(mini,'ดูหน้ากำลังฟัง',lambda:self.show('music'),width=150).pack(side='right')
 
     def build_music(self,page):
-        self.page_heading(page,'NOW PLAYING','ปล่อยให้เพลงพาไป')
+        self.page_heading(page,'Now playing',None)
         body=tk.Frame(page,bg=CREAM);body.pack(fill='both',expand=True)
         aside=tk.Frame(body,bg=CREAM,width=245);aside.pack(side='right',fill='y',padx=(30,0));aside.pack_propagate(False)
         focus=tk.Frame(body,bg=CREAM);focus.pack(side='left',fill='both',expand=True)
