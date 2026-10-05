@@ -26,3 +26,19 @@ class JointFeatures(TransformerMixin,BaseEstimator):
             columns.append(np.clip(cosine,-1,1))
         columns.extend(distance(a,b) for a,b in DISTANCES)
         return np.column_stack(columns)
+
+class ArticulatedFeatures(JointFeatures):
+    """Also describe finger folding at the palm and distances between all tips."""
+    def transform(self,X):
+        X=np.asarray(X,dtype=float)
+        original=super().transform(X)
+        def distance(a,b):return X[:,LOOKUP[tuple(sorted((a,b)))]]
+        extra=[]
+        for a,b,c in [(0,1,2),(0,5,6),(0,9,10),(0,13,14),(0,17,18)]:
+            ab=distance(a,b);bc=distance(b,c);ac=distance(a,c)
+            extra.append(np.clip((ab*ab+bc*bc-ac*ac)/np.maximum(2*ab*bc,1e-10),-1,1))
+        tips=[4,8,12,16,20]
+        pairs=[(0,t) for t in tips]+[(a,b) for i,a in enumerate(tips) for b in tips[i+1:]]
+        for pair in pairs:
+            if pair not in DISTANCES:extra.append(distance(*pair))
+        return np.column_stack([original,*extra])

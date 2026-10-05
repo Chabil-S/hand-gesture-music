@@ -9,7 +9,7 @@ from pathlib import Path
 import joblib
 import numpy as np
 import sklearn
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, f1_score
 from sklearn.neighbors import KNeighborsClassifier
@@ -18,7 +18,7 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 from gesture_features import features, FEATURE_VERSION
 from revision_validation import revision_checks
-from joint_features import JointFeatures
+from joint_features import JointFeatures, ArticulatedFeatures
 from combined_features import CombinedFeatures
 from label_review import load_reviews, exclusion_for
 
@@ -97,6 +97,17 @@ def main():
         ('Combined Logistic C=0.1',make_pipeline(CombinedFeatures(),StandardScaler(),LogisticRegression(C=.1,max_iter=3000))),
         ('Combined Logistic C=1',make_pipeline(CombinedFeatures(),StandardScaler(),LogisticRegression(C=1,max_iter=3000))),
         ('Combined Logistic C=10',make_pipeline(CombinedFeatures(),StandardScaler(),LogisticRegression(C=10,max_iter=3000))),
+        ('Articulated Logistic C=1',make_pipeline(ArticulatedFeatures(),StandardScaler(),LogisticRegression(C=1,max_iter=3000))),
+        ('Articulated Logistic C=10',make_pipeline(ArticulatedFeatures(),StandardScaler(),LogisticRegression(C=10,max_iter=3000))),
+        ('Articulated SVC RBF C=1',make_pipeline(ArticulatedFeatures(),StandardScaler(),SVC(C=1,probability=True,random_state=42))),
+        ('Articulated SVC RBF C=10',make_pipeline(ArticulatedFeatures(),StandardScaler(),SVC(C=10,probability=True,random_state=42))),
+        ('Combined SVC RBF C=1',make_pipeline(CombinedFeatures(),StandardScaler(),SVC(C=1,probability=True,random_state=42))),
+        ('Joint RandomForest',make_pipeline(JointFeatures(),RandomForestClassifier(n_estimators=200,random_state=42,n_jobs=-1))),
+        ('Articulated SVC RBF C=0.1',make_pipeline(ArticulatedFeatures(),StandardScaler(),SVC(C=.1,probability=True,random_state=42))),
+        ('Articulated SVC RBF C=0.3',make_pipeline(ArticulatedFeatures(),StandardScaler(),SVC(C=.3,probability=True,random_state=42))),
+        ('Articulated SVC gamma=0.01',make_pipeline(ArticulatedFeatures(),StandardScaler(),SVC(C=1,gamma=.01,probability=True,random_state=42))),
+        ('Articulated SVC gamma=0.1',make_pipeline(ArticulatedFeatures(),StandardScaler(),SVC(C=1,gamma=.1,probability=True,random_state=42))),
+        ('Articulated ExtraTrees',make_pipeline(ArticulatedFeatures(),ExtraTreesClassifier(n_estimators=300,random_state=42,n_jobs=-1))),
     ]
     baseline_validation=None
     if require_revision and (BASE/'latest_model.json').exists():
