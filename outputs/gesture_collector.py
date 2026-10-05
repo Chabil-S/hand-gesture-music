@@ -166,7 +166,8 @@ class Collector:
             try: self.frames.put_nowait(value)
             except queue.Full: pass
 
-    def camera_worker(self):
+    def camera_worker(self, stop_event=None):
+        stop_event=self.stop if stop_event is None else stop_event
         cap=None
         detector=None
         try:
@@ -185,7 +186,7 @@ class Collector:
                 min_hand_presence_confidence=0.6,min_tracking_confidence=0.6)
             detector=mp.tasks.vision.HandLandmarker.create_from_options(options)
             timestamp=-1
-            while not self.stop.is_set():
+            while not stop_event.is_set():
                 ok,frame=cap.read()
                 if not ok:
                     raise RuntimeError('อ่านภาพกล้องไม่ได้ กรุณาปิดแล้วเปิดหน้ากล้องใหม่')

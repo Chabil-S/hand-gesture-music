@@ -11,12 +11,13 @@ from datetime import datetime, timezone, timedelta
 
 import joblib
 import cv2
-from PIL import Image, ImageTk
-from gesture_collector import Collector, FONT
+from gesture_collector import Collector
 from gesture_features import features, GestureGate, FEATURE_VERSION
 from media_connection_probe import run
 from control_runtime import ActiveHand,MusicQueue
 from live_settings import load_settings,save_settings,validate_settings
+from music_ui import MusicUI
+from music_display import MusicDisplay
 
 BASE=Path(__file__).resolve().parent
 NAMES={'neutral':'ไม่สั่งงาน','next':'ถัดไป','previous':'ก่อนหน้า','toggle':'เล่น / พัก',
@@ -47,45 +48,54 @@ class LiveApp(Collector):
         self.last_frame=None
         self.last_prediction=None
         self.root=tk.Tk()
-        self.root.title('Hand Gesture Music — Live Demo')
-        self.root.geometry('1120x800')
-        self.root.minsize(1000,760)
-        self.root.configure(bg='#101827')
-        self.pose=tk.StringVar(value='เปิดกล้องเพื่อลองท่า')
+        self.camera_stop=threading.Event()
+        self.camera_thread=None
+        self.pose=tk.StringVar(value='รอท่ามือ')
         target=self.config.get('acceptance_policy',{}).get('minimum_command_recall')
         policy_text=f' • เป้าหมายประเมินรุ่น {target:.0%}' if target is not None else ''
         self.score=tk.StringVar(value=f'คะแนนขั้นต่ำรับท่า {self.config["threshold"]:.0%}'+policy_text)
         self.detection=tk.StringVar(value='กล้องยังไม่เปิด')
-        self.mode=tk.StringVar(value='โหมดดูผล • โมเดล '+directory.name)
+        self.mode=tk.StringVar(value='โหมดดูผล • ยังไม่ส่งคำสั่งเพลง')
         self.feedback=tk.StringVar(value='กำมือ = เล่น/พัก\nV ชี้–กลาง พับโป้ง = ถัดไป\nนิ้วโป้ง = ก่อนหน้า')
-        tk.Label(self.root,text='ควบคุมเพลงด้วยท่าทางมือ',font=(FONT,24,'bold'),bg='#101827',fg='white').pack(anchor='w',padx=28,pady=(20,2))
-        tk.Label(self.root,text='ขั้นที่ 3 • ทดลองโมเดลของคุณกับกล้องสด',font=(FONT,13),bg='#101827',fg='#93c5fd').pack(anchor='w',padx=28)
-        body=tk.Frame(self.root,bg='#101827'); body.pack(fill='both',expand=True,padx=28,pady=16)
-        left=tk.Frame(body,bg='#101827'); left.pack(side='left',fill='both',expand=True,padx=(0,22))
-        self.video=tk.Label(left,text='กดเปิดกล้อง\nกรอบสีเขียวคือมือที่ระบบรับคำสั่ง',font=(FONT,17),bg='#1e293b',fg='#cbd5e1')
-        self.video.pack(fill='both',expand=True)
-        tk.Label(left,textvariable=self.detection,font=(FONT,12),bg='#101827',fg='#67e8f9').pack(anchor='w',pady=(8,0))
         self.timing_text=tk.StringVar()
         self.refresh_timing_text()
-        tk.Label(left,textvariable=self.timing_text,font=(FONT,11),bg='#101827',fg='#94a3b8').pack(anchor='w',pady=(4,0))
-        right=tk.Frame(body,bg='#1e293b',width=330,padx=20,pady=16);right.pack(side='right',fill='y');right.pack_propagate(False)
-        for var,size,color in [(self.mode,13,'#93c5fd'),(self.pose,22,'white'),(self.score,11,'#94a3b8'),(self.feedback,13,'#e2e8f0')]:
-            tk.Label(right,textvariable=var,font=(FONT,size),bg='#1e293b',fg=color,wraplength=288,justify='left').pack(anchor='w',pady=(0,16))
-        self.open_button=self.button(right,'เปิดกล้อง',self.open_camera)
-        self.control_button=self.button(right,'เริ่มควบคุมเพลง',self.toggle_control,color='#0f766e')
-        self.control_button.configure(state='disabled')
-        self.read_button=self.button(right,'อ่านสถานะ Apple Music',lambda:self.request('status'))
-        self.settings_button=self.button(right,'ตั้งค่าการรับท่า',self.open_settings)
-        tk.Label(right,text='เปิด Apple Music และคิวเพลงไว้\nโหมดดูผลใช้ลองท่าโดยไม่เปลี่ยนเพลง\nถ้าจุดผิด ให้ขยับมือหรือปรับแสง',font=(FONT,11),bg='#1e293b',fg='#94a3b8',justify='left').pack(anchor='w',pady=10)
+        self.ui=MusicUI(self)
+        self.video=self.ui.video
+        self.open_button=self.ui.open_button
+        self.control_button=self.ui.control_button
+        self.read_button=self.ui.read_button
+        self.display=MusicDisplay(self.stop)
+        self.display.start()
         self.root.protocol('WM_DELETE_WINDOW',self.close)
         self.root.after(40,self.poll)
 
     def open_camera(self):
         if self.camera_running:return
+        if self.camera_thread is not None and self.camera_thread.is_alive():
+            self.feedback.set('กำลังปิดกล้องเดิม · รอสักครู่แล้วเปิดอีกครั้ง');return
+        while not self.frames.empty():
+            try:self.frames.get_nowait()
+            except queue.Empty:break
+        self.camera_stop.clear()
         self.camera_running=True
-        self.open_button.configure(state='disabled')
         self.detection.set('กำลังเปิดกล้อง…')
-        threading.Thread(target=self.camera_worker,daemon=True).start()
+        self.ui.sync_controls()
+        self.camera_thread=threading.Thread(target=lambda:Collector.camera_worker(self,self.camera_stop),daemon=True)
+        self.camera_thread.start()
+
+    def toggle_camera(self):
+        if not self.camera_running:
+            self.open_camera();return
+        self.camera_running=False;self.armed=False;self.camera_stop.set()
+        self.music.cancel_pending();self.gate.reset();self.hand_selector.reset()
+        self.last_frame=None;self.last_prediction=None
+        self.detection.set('กล้องปิด');self.pose.set('รอท่ามือ')
+        self.mode.set('โหมดดูผล • กล้องปิด')
+        self.ui.camera_off();self.ui.render_gesture(0,time.monotonic())
+
+    def manual_request(self,action):
+        if not self.busy and self.ui.music.get('connected'):
+            self.request(action)
 
     def refresh_timing_text(self):
         self.timing_text.set(f'ค้าง {self.config["hold_seconds"]:g} วินาที • ปล่อย {self.config["release_seconds"]:g} วินาที • ค้างมือไม่สั่งซ้ำ')
@@ -105,31 +115,13 @@ class LiveApp(Collector):
         self.score.set(f'คะแนนขั้นต่ำรับท่า {checked["threshold"]:.0%} • ค่าขณะใช้งานแยกจากผลประเมินรุ่น')
         self.feedback.set('บันทึกค่ารับท่าแล้ว • ลองในโหมดดูผลก่อนกดเริ่มควบคุมเพลง')
         self.refresh_timing_text()
+        self.ui.refresh_settings();self.ui.sync_controls()
 
     def open_settings(self):
-        window=tk.Toplevel(self.root)
-        window.title('ตั้งค่าการรับท่า');window.resizable(False,False)
-        values={}
-        labels=[('threshold','คะแนนขั้นต่ำรับท่า (%)'),('hold_seconds','เวลาค้างท่า (วินาที)'),
-                ('release_seconds','เวลาปล่อยมือ (วินาที)'),('max_frame_gap_seconds','ช่องว่างภาพสูงสุด (วินาที)')]
-        for row,(key,title) in enumerate(labels):
-            tk.Label(window,text=title,font=(FONT,12)).grid(row=row,column=0,sticky='w',padx=18,pady=8)
-            values[key]=tk.StringVar(value=f'{self.config[key]*100:g}' if key=='threshold' else f'{self.config[key]:g}')
-            tk.Entry(window,textvariable=values[key],width=12,font=(FONT,12)).grid(row=row,column=1,padx=18,pady=8)
-        def apply():
-            try:
-                result={k:float(v.get()) for k,v in values.items()};result['threshold']/=100
-                self.apply_runtime_settings(result)
-            except (ValueError,OSError) as error:
-                messagebox.showerror('ยังไม่ได้เปลี่ยนค่า',str(error),parent=window);return
-            window.destroy()
-        def restore():
-            for k,v in values.items():v.set(f'{self.frozen_config[k]*100:g}' if k=='threshold' else f'{self.frozen_config[k]:g}')
-        tk.Label(window,text='บันทึกแล้วกลับโหมดดูผล • ไม่เปลี่ยนเกณฑ์ประเมินรุ่น\nคะแนนสูงขึ้นอาจทำให้รับท่ายากขึ้น',font=(FONT,11)).grid(row=4,column=0,columnspan=2,pady=12)
-        tk.Button(window,text='คืนค่าที่รุ่นเคยทดสอบ',command=restore,font=(FONT,11)).grid(row=5,column=0,pady=(0,15))
-        tk.Button(window,text='บันทึกและใช้ค่า',command=apply,font=(FONT,11)).grid(row=5,column=1,pady=(0,15))
+        self.ui.show('settings')
 
     def toggle_control(self):
+        if not self.camera_running or self.last_frame is None:return
         self.armed=not self.armed
         self.music.cancel_pending()
         self.hand_selector.reset()
@@ -139,6 +131,8 @@ class LiveApp(Collector):
         self.control_button.configure(text='พักการควบคุม' if self.armed else 'เริ่มควบคุมเพลง')
         self.mode.set('ควบคุมเพลงอยู่ • เอามือออกก่อนเริ่ม' if self.armed else 'โหมดดูผล • ยังไม่ส่งคำสั่งเพลง')
         self.feedback.set(f'เอามือออกอย่างน้อย {self.config["release_seconds"]:g} วินาที แล้วทำท่าคำสั่ง' if self.armed else 'ลองทั้งสามท่าได้โดยไม่เปลี่ยนเพลง')
+
+        self.ui.sync_controls()
 
     def log(self,event):
         event['time']=datetime.now(timezone(timedelta(hours=7))).isoformat()
@@ -156,17 +150,21 @@ class LiveApp(Collector):
         self.pending_count+=1
         self.busy=True
         self.read_button.configure(state='disabled')
+        self.ui.set_music(self.ui.music)
         self.feedback.set('กำลังอ่าน Apple Music…' if action=='status' else f'รับคำสั่งแล้ว • รอส่ง/ตรวจ {self.pending_count} คำสั่ง\nยังรับท่าปล่อยมือและท่าถัดไปได้')
 
     def poll(self):
         try:
             frame=self.frames.get_nowait()
+            if self.camera_stop.is_set():raise queue.Empty
             if 'error' in frame:
                 self.detection.set(frame['error']);self.camera_running=False;self.armed=False
                 self.mode.set('กล้องมีปัญหา • หยุดส่งเพลงแล้ว')
                 self.control_button.configure(state='disabled',text='เริ่มควบคุมเพลง')
                 self.music.cancel_pending()
                 self.open_button.configure(state='normal');self.gate.reset()
+                self.last_frame=None;self.ui.camera_off()
+                self.pose.set('กล้องมีปัญหา');self.ui.render_gesture(0,time.monotonic())
             else:
                 self.last_frame=time.monotonic()
                 classified=[]
@@ -192,10 +190,7 @@ class LiveApp(Collector):
                                   (int(max(xs)*frame['w'])+10,int(max(ys)*frame['h'])+10),(55,235,130),3)
                 else:
                     label='uncertain' if reason=='conflict' else 'no_hand';score=0
-                picture=Image.fromarray(frame['rgb'])
-                picture.thumbnail((max(320,self.video.winfo_width()),max(240,self.video.winfo_height())),Image.Resampling.LANCZOS)
-                self.photo=ImageTk.PhotoImage(picture);self.video.configure(image=self.photo,text='')
-                self.control_button.configure(state='normal')
+                self.ui.render_frame(frame['rgb']);self.ui.sync_controls()
                 self.pose.set(NAMES[label])
                 target=self.config.get('acceptance_policy',{}).get('minimum_command_recall')
                 policy_text=f' • เป้าหมายประเมินรุ่น {target:.0%}' if target is not None else ''
@@ -214,15 +209,19 @@ class LiveApp(Collector):
                 elif self.gate.latched and not self.busy and self.last_prediction!=label and label not in ('no_hand','neutral'):
                     self.feedback.set('ปล่อยท่าก่อน: เอามือออก หรือทำท่าไม่สั่งงาน\nค้างมือหรือเปลี่ยนท่าคำสั่งทันทีจะไม่สั่งซ้ำ')
                 self.last_prediction=label
+                self.ui.render_gesture(score,frame['t'])
         except queue.Empty:pass
         if self.last_frame is not None and time.monotonic()-self.last_frame>self.config['max_frame_gap_seconds']:
             self.gate.update('uncertain',time.monotonic())
             self.pose.set('รอภาพกล้องใหม่')
+            self.ui.render_gesture(0,time.monotonic())
         try:
             action,result,error,epoch=self.results.get_nowait()
             self.pending_count=max(0,self.pending_count-1)
             self.busy=self.pending_count>0
             self.read_button.configure(state='disabled' if self.busy else 'normal')
+            self.ui.set_music(self.ui.music)
+            self.display.refresh.set()
             if epoch!=self.music.epoch:
                 self.log({'event':'music_result_after_pause','action':action,'result':result,'error':error})
             elif error:
@@ -236,12 +235,15 @@ class LiveApp(Collector):
                 self.feedback.set(prefix+'\n'+state['title']+'\n'+state_name)
                 self.log({'event':'music_result','action':action,'success':success,'result':result})
         except queue.Empty:pass
+        try:self.ui.set_music(self.display.results.get_nowait())
+        except queue.Empty:pass
         self.root.after(40,self.poll)
 
     def close(self):
         self.armed=False
         self.music.cancel_pending()
         self.stop.set()
+        self.camera_stop.set()
         self.root.destroy()
 
 if __name__=='__main__':
