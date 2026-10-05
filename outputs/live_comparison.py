@@ -113,7 +113,7 @@ class ComparisonApp(Collector):
             self.instruction.set('ทดสอบครบแล้ว • แจ้งว่า “ทดสอบครบแล้ว”'); self.record_button.configure(state='disabled')
             return
         hand,pose=TRIALS[self.index]
-        self.instruction.set(f'ช่วง {self.index+1}/10 • มือ'+('ขวา' if hand=='right' else 'ซ้าย')+'\n'+NAMES[pose])
+        self.instruction.set(f'ช่วง {self.index+1}/{len(TRIALS)} • มือ'+('ขวา' if hand=='right' else 'ซ้าย')+'\n'+NAMES[pose])
     def record(self):
         if self.running or self.index>=len(TRIALS): return
         if self.last_frame is None or time.monotonic()-self.last_frame>.3:
@@ -130,6 +130,8 @@ class ComparisonApp(Collector):
         self.trial_rows=[]; self.trial_file=f'trial_{self.index+1:02}_{uuid.uuid4().hex[:8]}.jsonl'
         self.stream=(self.session/self.trial_file).open('x',encoding='utf-8')
         self.started=time.monotonic(); self.running=True; self.record_button.configure(state='disabled')
+        self.instruction.set('แบมือให้เห็นในกล้อง • เตรียมก่อนทำท่า')
+        self.timer.set('อีก 3 วินาที')
         self.feedback.set('ขยับมุมตามที่ใช้จริง • ใช้มือตามป้าย • อีกข้างอยู่ในภาพได้แต่ไม่ทำคำสั่งแข่งกัน')
         self.write_manifest()
     def write_manifest(self):
@@ -144,7 +146,7 @@ class ComparisonApp(Collector):
         if complete:self.index+=1
         self.manifest['complete']=self.index==len(TRIALS)
         self.write_manifest(); self.update_instruction()
-        self.progress.set(f'บันทึกครบแล้ว {self.index}/10 ช่วง')
+        self.progress.set(f'บันทึกครบแล้ว {self.index}/{len(TRIALS)} ช่วง')
         self.feedback.set('บันทึกช่วงนี้แล้ว • กดเริ่มช่วงถัดไปเมื่อพร้อม' if self.index<len(TRIALS) else 'ข้อมูลอยู่ในเครื่องแล้ว • ส่งข้อความ “ทดสอบครบแล้ว”')
         self.record_button.configure(state='normal' if self.camera_running and self.index<len(TRIALS) else 'disabled')
         if not complete:self.feedback.set('ช่วงนี้หยุดก่อนครบ • ข้อมูลเดิมยังอยู่ • เปิดกล้องและลองช่วงเดิมอีกครั้ง')
@@ -155,6 +157,9 @@ class ComparisonApp(Collector):
             if phase=='done': self.finish(True)
             else:
                 end={'prepare':3,'hold':7 if cycle==1 else 14,'release':10 if cycle==1 else 17}[phase]
+                hand,pose=TRIALS[self.index]
+                action=NAMES[pose] if phase=='hold' else 'แบมือให้เห็นในกล้อง'
+                self.instruction.set(f'ช่วง {self.index+1}/{len(TRIALS)} • มือ'+('ขวา' if hand=='right' else 'ซ้าย')+'\n'+action)
                 self.timer.set(('แบมือให้เห็นในกล้อง • เตรียม' if phase=='prepare' else 'ทำท่าตามป้าย • ครั้ง '+str(cycle) if phase=='hold' else 'ปล่อยท่า • แบมือให้เห็นในกล้อง')+f'\nอีก {max(1,math.ceil(end-elapsed))} วินาที')
         try:
             frame=self.frames.get_nowait()
@@ -175,7 +180,9 @@ class ComparisonApp(Collector):
                     if elapsed>=0:
                         phase,cycle=phase_at(elapsed)
                         row={'elapsed':elapsed,'phase':phase,'cycle':cycle,'trial':self.index+1,'hand_intent':TRIALS[self.index][0],
-                            'pose_intent':TRIALS[self.index][1],'w':frame['w'],'h':frame['h'],'hands':frame['hands'],'branches':results}
+                            'pose_intent':TRIALS[self.index][1],'w':frame['w'],'h':frame['h'],'hands':frame['hands'],'branches':results,
+                            'display_elapsed':current-self.started,'display_phase':phase_at(current-self.started)[0],
+                            'frame_age_at_poll':current-frame['t']}
                         self.stream.write(json.dumps(row,ensure_ascii=False)+'\n'); self.trial_rows.append(row)
         except queue.Empty:pass
         if self.last_frame is not None and current-self.last_frame>.3 and not self.stale_sent:
