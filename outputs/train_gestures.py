@@ -19,6 +19,7 @@ from sklearn.preprocessing import StandardScaler
 from gesture_features import features, FEATURE_VERSION
 from revision_validation import revision_checks
 from joint_features import JointFeatures
+from combined_features import CombinedFeatures
 
 BASE=Path(__file__).resolve().parent
 LABELS=['neutral','next','previous','toggle']
@@ -84,6 +85,9 @@ def main():
         ('Joint KNN k=5',make_pipeline(JointFeatures(),StandardScaler(),KNeighborsClassifier(n_neighbors=5,weights='distance'))),
         ('Joint SVC RBF C=1',make_pipeline(JointFeatures(),StandardScaler(),SVC(C=1,gamma='scale',probability=True,random_state=42))),
         ('Joint SVC RBF C=10',make_pipeline(JointFeatures(),StandardScaler(),SVC(C=10,gamma='scale',probability=True,random_state=42))),
+        ('Combined Logistic C=0.1',make_pipeline(CombinedFeatures(),StandardScaler(),LogisticRegression(C=.1,max_iter=3000))),
+        ('Combined Logistic C=1',make_pipeline(CombinedFeatures(),StandardScaler(),LogisticRegression(C=1,max_iter=3000))),
+        ('Combined Logistic C=10',make_pipeline(CombinedFeatures(),StandardScaler(),LogisticRegression(C=10,max_iter=3000))),
     ]
     baseline_validation=None
     if require_revision and (BASE/'latest_model.json').exists():
@@ -124,7 +128,7 @@ def main():
         eligible=[trial for trial in revision_trials if trial['checks']['passed']]
         if not eligible:
             dump(BASE/'three_finger_validation_attempt.json',{'trials':revision_trials,'published':False})
-            raise RuntimeError('No candidate passed three-finger validation; current model unchanged, test not evaluated')
+            raise RuntimeError('No candidate passed all-command/three-finger validation; current model unchanged, test not evaluated')
         selected_revision=max(eligible,key=lambda t:t['selection_score'])
         best_index=selected_revision['model_index']
     name,model=models[best_index]
@@ -154,7 +158,7 @@ def main():
     config['collection_kinds']=sorted(set(kinds.tolist()))
     config['revision_validation']=selected_revision['checks'] if selected_revision else None
     if selected_revision:
-        config['selection']='validation-only: pass three-finger/V temporal safety checks, then maximize gated per-hand macro-F1; stable candidate/threshold order breaks ties'
+        config['selection']='validation-only: pass all-command, neutral, three-finger and measured-neutral release checks per hand, then maximize gated per-hand macro-F1; stable candidate/threshold order breaks ties'
         config['test_scope']='fresh and previously evaluated test sessions are reported separately; previously evaluated sessions are regression checks'
         config['test_session_scope']={session['session_id']:('regression' if session['session_id'] in previously_evaluated else 'fresh') for session in audit}
     # Persist selection before calculating any test performance.
@@ -227,7 +231,7 @@ def main():
     (destination/'MODEL_REPORT_TH.md').write_text('\n'.join(lines)+'\n',encoding='utf-8')
     if selected_revision:
         with (destination/'MODEL_REPORT_TH.md').open('a',encoding='utf-8') as report:
-            report.write('\n## การแก้ท่าสามนิ้ว\n\nเลือกโมเดลและเกณฑ์คะแนนจาก validation เท่านั้น ต้องไม่มีคำสั่งสามนิ้วผ่านตัวตรวจท่าค้าง และรับ V ครบทุกคลิปพร้อมรับรายเฟรมอย่างน้อย 95% แยกข้าง ก่อนเปิด test\n')
+            report.write('\n## การตรวจทุกคำสั่งและท่าสามนิ้ว\n\nเลือกโมเดลและเกณฑ์คะแนนจาก validation เท่านั้น ก่อนเปิด test ต้องผ่าน: '+selected_revision['checks']['rule']+'\n')
             report.write('ชุด test ท่าเดิมเคยประเมินแล้ว จึงเป็นการตรวจการถดถอย ส่วน test สามนิ้วเป็นชุดใหม่ ไม่ใช่ชุดทดสอบใหม่ของทุกท่า\n')
             for partition,checks in revision_metrics.items():
                 for h,r in checks['per_hand'].items():
