@@ -1,0 +1,6 @@
+{
+  "threshold": 0.95,
+  "hold_seconds": 0.6,
+  "release_seconds": 0.35,
+  "max_frame_gap_seconds": 0.3
+}

@@ -5,6 +5,7 @@ import queue
 import threading
 import time
 import tkinter as tk
+from tkinter import messagebox
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
 
@@ -15,6 +16,7 @@ from gesture_collector import Collector, FONT
 from gesture_features import features, GestureGate, FEATURE_VERSION
 from media_connection_probe import run
 from control_runtime import ActiveHand,MusicQueue
+from live_settings import load_settings,save_settings,validate_settings
 
 BASE=Path(__file__).resolve().parent
 NAMES={'neutral':'ไม่สั่งงาน','next':'ถัดไป','previous':'ก่อนหน้า','toggle':'เล่น / พัก',
@@ -28,6 +30,9 @@ class LiveApp(Collector):
         if self.config.get('eligible_for_activation') is False:
             raise RuntimeError('รุ่นนี้ใช้เปรียบเทียบกล้องเท่านั้น ยังไม่ผ่านเกณฑ์สำหรับควบคุมเพลง')
         if self.config['feature_version']!=FEATURE_VERSION: raise RuntimeError('Feature version mismatch')
+        self.frozen_config=dict(self.config)
+        self.runtime_settings=load_settings(BASE/'live_settings.json',self.frozen_config)
+        self.config.update(self.runtime_settings)
         self.model=joblib.load(directory/'gesture_model.joblib')
         self.gate=GestureGate(self.config['hold_seconds'],self.config['release_seconds'],self.config['max_frame_gap_seconds'])
         self.frames=queue.Queue(maxsize=1)
@@ -43,8 +48,8 @@ class LiveApp(Collector):
         self.last_prediction=None
         self.root=tk.Tk()
         self.root.title('Hand Gesture Music — Live Demo')
-        self.root.geometry('1120x710')
-        self.root.minsize(1000,650)
+        self.root.geometry('1120x800')
+        self.root.minsize(1000,760)
         self.root.configure(bg='#101827')
         self.pose=tk.StringVar(value='เปิดกล้องเพื่อลองท่า')
         target=self.config.get('acceptance_policy',{}).get('minimum_command_recall')
@@ -60,7 +65,9 @@ class LiveApp(Collector):
         self.video=tk.Label(left,text='กดเปิดกล้อง\nกรอบสีเขียวคือมือที่ระบบรับคำสั่ง',font=(FONT,17),bg='#1e293b',fg='#cbd5e1')
         self.video.pack(fill='both',expand=True)
         tk.Label(left,textvariable=self.detection,font=(FONT,12),bg='#101827',fg='#67e8f9').pack(anchor='w',pady=(8,0))
-        tk.Label(left,text='คงท่า 0.6 วินาที • ค้างมือไม่สั่งซ้ำ • เอามือออกก่อนท่าถัดไป',font=(FONT,11),bg='#101827',fg='#94a3b8').pack(anchor='w',pady=(4,0))
+        self.timing_text=tk.StringVar()
+        self.refresh_timing_text()
+        tk.Label(left,textvariable=self.timing_text,font=(FONT,11),bg='#101827',fg='#94a3b8').pack(anchor='w',pady=(4,0))
         right=tk.Frame(body,bg='#1e293b',width=330,padx=20,pady=16);right.pack(side='right',fill='y');right.pack_propagate(False)
         for var,size,color in [(self.mode,13,'#93c5fd'),(self.pose,22,'white'),(self.score,11,'#94a3b8'),(self.feedback,13,'#e2e8f0')]:
             tk.Label(right,textvariable=var,font=(FONT,size),bg='#1e293b',fg=color,wraplength=288,justify='left').pack(anchor='w',pady=(0,16))
@@ -68,6 +75,7 @@ class LiveApp(Collector):
         self.control_button=self.button(right,'เริ่มควบคุมเพลง',self.toggle_control,color='#0f766e')
         self.control_button.configure(state='disabled')
         self.read_button=self.button(right,'อ่านสถานะ Apple Music',lambda:self.request('status'))
+        self.settings_button=self.button(right,'ตั้งค่าการรับท่า',self.open_settings)
         tk.Label(right,text='เปิด Apple Music และคิวเพลงไว้\nโหมดดูผลใช้ลองท่าโดยไม่เปลี่ยนเพลง\nถ้าจุดผิด ให้ขยับมือหรือปรับแสง',font=(FONT,11),bg='#1e293b',fg='#94a3b8',justify='left').pack(anchor='w',pady=10)
         self.root.protocol('WM_DELETE_WINDOW',self.close)
         self.root.after(40,self.poll)
@@ -79,6 +87,48 @@ class LiveApp(Collector):
         self.detection.set('กำลังเปิดกล้อง…')
         threading.Thread(target=self.camera_worker,daemon=True).start()
 
+    def refresh_timing_text(self):
+        self.timing_text.set(f'ค้าง {self.config["hold_seconds"]:g} วินาที • ปล่อย {self.config["release_seconds"]:g} วินาที • ค้างมือไม่สั่งซ้ำ')
+
+    def apply_runtime_settings(self,values):
+        checked=validate_settings(values)
+        save_settings(BASE/'live_settings.json',checked)
+        self.armed=False
+        self.music.cancel_pending()
+        self.hand_selector.reset()
+        self.runtime_settings=checked
+        self.config.update(checked)
+        self.gate=GestureGate(checked['hold_seconds'],checked['release_seconds'],checked['max_frame_gap_seconds'])
+        self.last_prediction=None
+        self.control_button.configure(text='เริ่มควบคุมเพลง')
+        self.mode.set('โหมดดูผล • ใช้ค่ารับท่าที่ปรับเอง')
+        self.score.set(f'คะแนนขั้นต่ำรับท่า {checked["threshold"]:.0%} • ค่าขณะใช้งานแยกจากผลประเมินรุ่น')
+        self.feedback.set('บันทึกค่ารับท่าแล้ว • ลองในโหมดดูผลก่อนกดเริ่มควบคุมเพลง')
+        self.refresh_timing_text()
+
+    def open_settings(self):
+        window=tk.Toplevel(self.root)
+        window.title('ตั้งค่าการรับท่า');window.resizable(False,False)
+        values={}
+        labels=[('threshold','คะแนนขั้นต่ำรับท่า (%)'),('hold_seconds','เวลาค้างท่า (วินาที)'),
+                ('release_seconds','เวลาปล่อยมือ (วินาที)'),('max_frame_gap_seconds','ช่องว่างภาพสูงสุด (วินาที)')]
+        for row,(key,title) in enumerate(labels):
+            tk.Label(window,text=title,font=(FONT,12)).grid(row=row,column=0,sticky='w',padx=18,pady=8)
+            values[key]=tk.StringVar(value=f'{self.config[key]*100:g}' if key=='threshold' else f'{self.config[key]:g}')
+            tk.Entry(window,textvariable=values[key],width=12,font=(FONT,12)).grid(row=row,column=1,padx=18,pady=8)
+        def apply():
+            try:
+                result={k:float(v.get()) for k,v in values.items()};result['threshold']/=100
+                self.apply_runtime_settings(result)
+            except (ValueError,OSError) as error:
+                messagebox.showerror('ยังไม่ได้เปลี่ยนค่า',str(error),parent=window);return
+            window.destroy()
+        def restore():
+            for k,v in values.items():v.set(f'{self.frozen_config[k]*100:g}' if k=='threshold' else f'{self.frozen_config[k]:g}')
+        tk.Label(window,text='บันทึกแล้วกลับโหมดดูผล • ไม่เปลี่ยนเกณฑ์ประเมินรุ่น\nคะแนนสูงขึ้นอาจทำให้รับท่ายากขึ้น',font=(FONT,11)).grid(row=4,column=0,columnspan=2,pady=12)
+        tk.Button(window,text='คืนค่าที่รุ่นเคยทดสอบ',command=restore,font=(FONT,11)).grid(row=5,column=0,pady=(0,15))
+        tk.Button(window,text='บันทึกและใช้ค่า',command=apply,font=(FONT,11)).grid(row=5,column=1,pady=(0,15))
+
     def toggle_control(self):
         self.armed=not self.armed
         self.music.cancel_pending()
@@ -88,11 +138,13 @@ class LiveApp(Collector):
         self.gate.latched=self.armed
         self.control_button.configure(text='พักการควบคุม' if self.armed else 'เริ่มควบคุมเพลง')
         self.mode.set('ควบคุมเพลงอยู่ • เอามือออกก่อนเริ่ม' if self.armed else 'โหมดดูผล • ยังไม่ส่งคำสั่งเพลง')
-        self.feedback.set('เอามือออกอย่างน้อย 0.35 วินาที แล้วทำท่าคำสั่ง' if self.armed else 'ลองทั้งสามท่าได้โดยไม่เปลี่ยนเพลง')
+        self.feedback.set(f'เอามือออกอย่างน้อย {self.config["release_seconds"]:g} วินาที แล้วทำท่าคำสั่ง' if self.armed else 'ลองทั้งสามท่าได้โดยไม่เปลี่ยนเพลง')
 
     def log(self,event):
         event['time']=datetime.now(timezone(timedelta(hours=7))).isoformat()
         event['model']=self.config['selected_model']
+        event['runtime_settings']=dict(self.runtime_settings)
+        event['settings_match_frozen']=all(self.config[k]==self.frozen_config[k] for k in self.runtime_settings)
         with LOG.open('a',encoding='utf-8') as file:file.write(json.dumps(event,ensure_ascii=False)+'\n')
 
     def request(self,action):
@@ -163,7 +215,7 @@ class LiveApp(Collector):
                     self.feedback.set('ปล่อยท่าก่อน: เอามือออก หรือทำท่าไม่สั่งงาน\nค้างมือหรือเปลี่ยนท่าคำสั่งทันทีจะไม่สั่งซ้ำ')
                 self.last_prediction=label
         except queue.Empty:pass
-        if self.last_frame is not None and time.monotonic()-self.last_frame>0.3:
+        if self.last_frame is not None and time.monotonic()-self.last_frame>self.config['max_frame_gap_seconds']:
             self.gate.update('uncertain',time.monotonic())
             self.pose.set('รอภาพกล้องใหม่')
         try:
@@ -192,4 +244,10 @@ class LiveApp(Collector):
         self.stop.set()
         self.root.destroy()
 
-if __name__=='__main__':LiveApp().root.mainloop()
+if __name__=='__main__':
+    try:app=LiveApp()
+    except (ValueError,OSError) as error:
+        root=tk.Tk();root.withdraw()
+        messagebox.showerror('เปิดโปรแกรมไม่สำเร็จ','ตรวจไฟล์ live_settings.json และไฟล์รุ่นที่ใช้\n'+str(error),parent=root)
+        root.destroy()
+    else:app.root.mainloop()
