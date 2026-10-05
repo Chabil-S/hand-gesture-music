@@ -54,8 +54,8 @@ async def read_display(manager, cached_key=None, cached_cover=None):
             cover = None
     controls = info.controls
     return {
-        'connected': True, 'title': media.title or 'ยังไม่มีชื่อเพลง',
-        'artist': media.artist or 'ไม่ระบุศิลปิน', 'album': media.album_title,
+        'connected': True, 'title': media.title,
+        'artist': media.artist, 'album': media.album_title,
         'status': info.playback_status.name, 'cover': cover,
         'position_seconds': max(0, timeline.position.total_seconds()-timeline.start_time.total_seconds()),
         'duration_seconds': max(0, (timeline.end_time-timeline.start_time).total_seconds()),

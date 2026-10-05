@@ -18,6 +18,7 @@ from control_runtime import ActiveHand,MusicQueue
 from live_settings import load_settings,save_settings,validate_settings
 from music_ui import MusicUI
 from music_display import MusicDisplay
+from ui_language import Localizer, LocalizedVar
 
 BASE=Path(__file__).resolve().parent
 NAMES={'neutral':'ไม่สั่งงาน','next':'ถัดไป','previous':'ก่อนหน้า','toggle':'เล่น / พัก',
@@ -48,16 +49,17 @@ class LiveApp(Collector):
         self.last_frame=None
         self.last_prediction=None
         self.root=tk.Tk()
+        self.root.locale=Localizer(BASE/'ui_preferences.json')
         self.camera_stop=threading.Event()
         self.camera_thread=None
-        self.pose=tk.StringVar(value='รอท่ามือ')
+        self.pose=LocalizedVar(value='รอท่ามือ')
         target=self.config.get('acceptance_policy',{}).get('minimum_command_recall')
         policy_text=f' • เป้าหมายประเมินรุ่น {target:.0%}' if target is not None else ''
         self.score=tk.StringVar(value=f'คะแนนขั้นต่ำรับท่า {self.config["threshold"]:.0%}'+policy_text)
-        self.detection=tk.StringVar(value='กล้องยังไม่เปิด')
-        self.mode=tk.StringVar(value='โหมดดูผล • ยังไม่ส่งคำสั่งเพลง')
-        self.feedback=tk.StringVar(value='กำมือ = เล่น/พัก\nV ชี้–กลาง พับโป้ง = ถัดไป\nนิ้วโป้ง = ก่อนหน้า')
-        self.timing_text=tk.StringVar()
+        self.detection=LocalizedVar(value='กล้องยังไม่เปิด')
+        self.mode=LocalizedVar(value='โหมดดูผล • ยังไม่ส่งคำสั่งเพลง')
+        self.feedback=LocalizedVar(value='กำมือ = เล่น/พัก\nV ชี้–กลาง พับโป้ง = ถัดไป\nนิ้วโป้ง = ก่อนหน้า')
+        self.timing_text=LocalizedVar()
         self.refresh_timing_text()
         self.ui=MusicUI(self)
         self.video=self.ui.video
@@ -232,7 +234,7 @@ class LiveApp(Collector):
                 state_name={'PLAYING':'กำลังเล่น','PAUSED':'พักเพลง'}.get(state['status'],state['status'])
                 success=result.get('observed_success')
                 prefix='อ่านสถานะแล้ว' if action=='status' else 'ตรวจพบผลคำสั่งแล้ว' if success else 'ยังไม่ยืนยันผล โปรดดูเครื่องเล่น'
-                self.feedback.set(prefix+'\n'+state['title']+'\n'+state_name)
+                self.feedback.set(prefix+'\n'+state_name)
                 self.log({'event':'music_result','action':action,'success':success,'result':result})
         except queue.Empty:pass
         try:self.ui.set_music(self.display.results.get_nowait())

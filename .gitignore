@@ -12,6 +12,8 @@ outputs/assets/*.task
 outputs/assets/*.zip
 outputs/hand_verification.json
 outputs/latest_model.json
+outputs/ui_preferences.json
+outputs/ui_preferences.tmp
 outputs/*events.jsonl
 outputs/data_audit.json
 outputs/live_guard_validation.json

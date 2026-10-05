@@ -3,6 +3,7 @@ import tkinter as tk
 from tkinter import messagebox
 from tkinter import font as tkfont
 from PIL import Image, ImageTk, ImageOps, ImageDraw
+from ui_language import LocalizedVar
 
 FONT = 'Leelawadee UI'
 CREAM = '#F5EEDD'
@@ -51,21 +52,26 @@ class SoftButton(tk.Canvas):
         self.text, self.command, self.primary = text, command, primary
         self.icon=icon
         self.state = 'normal'
+        self.text_font=tkfont.Font(family=FONT,size=12)
         self.bind('<Configure>', lambda e: self.draw())
         self.bind('<Button-1>', lambda e: self.invoke())
         self.bind('<Return>', lambda e: self.invoke())
         self.bind('<space>', lambda e: self.invoke())
         self.bind('<FocusIn>', lambda e: self.draw())
         self.bind('<FocusOut>', lambda e: self.draw())
+        self.winfo_toplevel().locale.callbacks.append(self.draw)
         self.draw()
 
     def configure(self, cnf=None, **kwargs):
         if hasattr(self, 'text'):
+            changed=False
             for key in ('text', 'state'):
                 if key in kwargs:
-                    setattr(self, key, kwargs.pop(key))
-            result = super().configure(cnf, **kwargs)
-            self.draw()
+                    value=kwargs.pop(key)
+                    changed=changed or getattr(self,key)!=value
+                    setattr(self,key,value)
+            result = super().configure(cnf, **kwargs) if cnf is not None or kwargs else None
+            if changed or cnf is not None or kwargs:self.draw()
             return result
         return super().configure(cnf, **kwargs)
 
@@ -89,8 +95,14 @@ class SoftButton(tk.Canvas):
                'เริ่มควบคุมเพลง':'play','พักการควบคุม':'pause','ก่อนหน้า':'previous','ถัดไป':'next',
                'เล่น / พัก':'play','อ่านสถานะ Apple Music':'refresh'}
         icon=self.icon or icons.get(self.text)
-        if icon:draw_icon(self,icon,20,22,text)
-        self.create_text(w/2+(10 if icon else 0),22,text=self.text,fill=text,font=(FONT,12))
+        self.display_text=self.winfo_toplevel().locale.text(self.text)
+        font=self.text_font; font.configure(size=12)
+        if font.measure(self.display_text)+(26 if icon else 0)>w-20:font.configure(size=11)
+        if icon:
+            start=(w-font.measure(self.display_text)-26)/2
+            draw_icon(self,icon,start+9,22,text)
+            self.create_text(start+26,22,text=self.display_text,anchor='w',fill=text,font=font)
+        else:self.create_text(w/2,22,text=self.display_text,fill=text,font=font)
 
 
 class NumberField(tk.Canvas):
@@ -157,6 +169,7 @@ def time_text(seconds):
 class MusicUI:
     def __init__(self, app):
         self.app, self.root = app, app.root
+        self.locale=self.root.locale
         self.view = 'camera'
         self.rgb = None
         self.cover_image = None
@@ -166,20 +179,20 @@ class MusicUI:
         self.root.geometry('1220x900')
         self.root.minsize(1080, 820)
         self.root.title('Gesture Music')
-        self.status = tk.StringVar(value='เปิด Apple Music และเริ่มเพลงเพื่อเชื่อมต่อ')
+        self.status = LocalizedVar(value='เปิด Apple Music และเริ่มเพลงเพื่อเชื่อมต่อ')
         self.title = tk.StringVar(value='ยังไม่มีเพลงที่กำลังฟัง')
         self.artist = tk.StringVar(value='เปิด Apple Music แล้วเริ่มเพลง')
         self.mini_title = tk.StringVar(value='ยังไม่มีเพลงที่กำลังฟัง')
         self.mini_details = tk.StringVar(value='เปิด Apple Music แล้วเริ่มเพลง')
         self.mini_status = tk.StringVar(value='ยังไม่ได้เชื่อมต่อ')
-        self.playback = tk.StringVar(value='ยังไม่ได้เชื่อมต่อ')
-        self.cover_hint = tk.StringVar(value='ยังไม่มีภาพปกจาก Apple Music')
+        self.playback = LocalizedVar(value='ยังไม่ได้เชื่อมต่อ')
+        self.cover_hint = LocalizedVar(value='ยังไม่มีภาพปกจาก Apple Music')
         self.confidence = tk.StringVar(value='—')
-        self.hold = tk.StringVar(value='พร้อมรับท่า')
-        self.threshold = tk.StringVar()
-        self.release = tk.StringVar()
-        self.timing = tk.StringVar()
-        self.control_state = tk.StringVar(value='โหมดดูผล')
+        self.hold = LocalizedVar(value='พร้อมรับท่า')
+        self.threshold = LocalizedVar()
+        self.release = LocalizedVar()
+        self.timing = LocalizedVar()
+        self.control_state = LocalizedVar(value='โหมดดูผล')
         self.camera_caption = tk.StringVar(value='เปิดกล้องเพื่อลองท่า')
         self.settings_values = {}
         self.header()
@@ -205,11 +218,15 @@ class MusicUI:
         self.build_settings(self.pages['settings'])
         self.refresh_settings()
         self.show('camera')
+        self.locale.callbacks.append(self.refresh_language)
+        self.refresh_language()
 
     def label(self, parent, value, size=11, color=INK, wrap=0, bold=False):
         args={'textvariable':value} if isinstance(value,tk.Variable) else {'text':value}
-        return tk.Label(parent, **args, font=(FONT,max(11,size),'bold' if bold else 'normal'),
+        widget=tk.Label(parent, **args, font=(FONT,max(11,size),'bold' if bold else 'normal'),
                         bg=parent.cget('bg'),fg=color,anchor='w',justify='left',wraplength=wrap)
+        if isinstance(value,str):self.locale.bind(widget,value)
+        return widget
 
     def header(self):
         row=tk.Frame(self.root,bg=CREAM,padx=28,pady=18);row.pack(fill='x')
@@ -217,6 +234,8 @@ class MusicUI:
         title=tk.Frame(row,bg=CREAM);title.pack(side='left')
         self.label(title,'Gesture Music',20,bold=True).pack(anchor='w')
         self.label(title,'เพลงของคุณ ในจังหวะของมือ',10,MUTED).pack(anchor='w')
+        self.language_button=SoftButton(row,'EN',self.toggle_language,width=78,icon='language')
+        self.language_button.pack(side='right',padx=(12,0))
         self.read_button=SoftButton(row,'อ่านสถานะ Apple Music',lambda:self.app.request('status'),width=225)
         self.read_button.pack(side='right')
         tk.Frame(self.root,bg=LINE,height=1).pack(fill='x')
@@ -232,9 +251,11 @@ class MusicUI:
         top=tk.Frame(box,bg=CAMERA,padx=12,pady=6);top.pack(fill='x')
         self.label(top,'ภาพจากกล้อง' if not small else 'กล้อง',10).pack(side='left')
         if not small:
-            self.open_button=SoftButton(top,'เปิดกล้อง',self.app.toggle_camera,width=108)
+            self.open_button=SoftButton(top,'เปิดกล้อง',self.app.toggle_camera,width=150)
             self.open_button.pack(side='right')
-        video=tk.Label(box,text='เปิดกล้องเพื่อลองท่า',bg=CAMERA,fg=MUTED,font=(FONT,12),width=1,height=1)
+        caption=LocalizedVar(value='เปิดกล้องเพื่อลองท่า')
+        video=tk.Label(box,textvariable=caption,bg=CAMERA,fg=MUTED,font=(FONT,12),width=1,height=1)
+        video.caption=caption
         video.pack(fill='both',expand=True,padx=10,pady=8)
         self.videos.append(video)
         bottom=tk.Frame(box,bg=SKY,padx=10,pady=8);bottom.pack(fill='x')
@@ -257,7 +278,7 @@ class MusicUI:
         for pose, command in [('กำมือ','เล่น / พัก'),('V ชี้–กลาง พับโป้ง','ถัดไป'),('ชูโป้ง','ก่อนหน้า')]:
             item=tk.Frame(row,bg=CREAM)
             item.pack(side='left' if horizontal else 'top',fill='x',expand=horizontal,pady=3)
-            self.label(item,pose,10,MUTED).pack(anchor='w')
+            self.label(item,pose,10,MUTED,wrap=160 if horizontal else 230).pack(anchor='w')
             self.label(item,command,11,bold=True).pack(anchor='w')
 
     def build_camera(self,page):
@@ -272,13 +293,12 @@ class MusicUI:
         self.label(aside,self.app.pose,22,bold=True,wrap=230).pack(anchor='w',pady=(4,16))
         self.label(aside,self.confidence,38,BLUE).pack(anchor='w')
         self.label(aside,'คะแนนโมเดล',9,MUTED).pack(anchor='w')
+        self.label(aside,self.threshold,11,MUTED).pack(anchor='w',pady=(3,0))
         self.label(aside,self.hold,10,MUTED,wrap=230).pack(anchor='w',pady=(22,8))
         self.hold_bar=tk.Canvas(aside,height=6,bg=SOFT,highlightthickness=0)
         self.hold_bar.pack(fill='x')
         self.control_button=self.control(aside)
         self.label(aside,self.app.feedback,11,INK,wrap=230).pack(anchor='w',pady=(4,10))
-        tk.Frame(aside,bg=LINE,height=1).pack(fill='x')
-        self.label(aside,self.threshold,10,MUTED).pack(anchor='w',pady=(14,3))
         mini=tk.Frame(page,bg=SOFT,padx=16,pady=12);mini.pack(fill='x',pady=(4,0))
         self.mini_cover=tk.Label(mini,bg=SOFT,width=64,height=64,bd=0,highlightthickness=0)
         self.mini_cover.pack(side='left',padx=(0,14));self.covers.append((self.mini_cover,64))
@@ -302,11 +322,11 @@ class MusicUI:
         self.label(focus,self.playback,10,MUTED).pack(pady=(6,16))
         self.timeline=tk.Canvas(focus,height=5,bg=SOFT,highlightthickness=0)
         self.timeline.pack(fill='x',padx=12)
-        self.times=tk.StringVar(value='—  /  —')
+        self.times=LocalizedVar(value='—  /  —')
         self.label(focus,self.times,10,MUTED).pack(anchor='w',padx=12,pady=(6,12))
         actions=tk.Frame(focus,bg=CREAM);actions.pack()
         for text,action,key in [('ก่อนหน้า','previous_track','can_previous'),('เล่น / พัก','toggle','can_toggle'),('ถัดไป','next','can_next')]:
-            b=SoftButton(actions,text,lambda a=action:self.app.manual_request(a),primary=action=='toggle',width=105)
+            b=SoftButton(actions,text,lambda a=action:self.app.manual_request(a),primary=action=='toggle',width=125)
             b.pack(side='left',padx=4);b.configure(state='disabled');self.transport.append((b,key))
         self.label(focus,'ปุ่มเพลงสั่งงานทันที · โหมดดูผลใช้กับท่ามือ',9,MUTED).pack(pady=(10,0))
         camera=self.camera_box(aside,True);camera.pack(fill='x');camera.configure(height=200);camera.pack_propagate(False)
@@ -359,7 +379,7 @@ class MusicUI:
         self.label(form,'บันทึกแล้วกลับโหมดดูผล เพื่อให้ลองท่าก่อนเปิดควบคุมเพลง',10,MUTED).pack(anchor='w',pady=(10,6))
         buttons=tk.Frame(form,bg=CREAM);buttons.pack(fill='x',pady=8)
         SoftButton(buttons,'บันทึกและใช้ค่า',self.save_settings,primary=True,width=170).pack(side='right')
-        SoftButton(buttons,'คืนค่าที่รุ่นเคยทดสอบ',self.restore_settings,width=205).pack(side='right',padx=12)
+        SoftButton(buttons,'คืนค่าที่รุ่นเคยทดสอบ',self.restore_settings,width=225).pack(side='right',padx=12)
 
     def show(self,name):
         self.view=name
@@ -395,7 +415,7 @@ class MusicUI:
             values['threshold']/=100
             self.app.apply_runtime_settings(values)
         except (ValueError,OSError) as error:
-            messagebox.showerror('ยังไม่ได้เปลี่ยนค่า',str(error),parent=self.root)
+            messagebox.showerror(self.locale.text('ยังไม่ได้เปลี่ยนค่า'),self.locale.text(str(error)),parent=self.root)
             return
         self.refresh_settings();self.show('camera')
 
@@ -405,6 +425,15 @@ class MusicUI:
             b.configure(text='พักการควบคุม' if self.app.armed else 'เริ่มควบคุมเพลง',
                         state='normal' if self.app.camera_running and self.app.last_frame is not None else 'disabled')
         self.open_button.configure(text='ปิดกล้อง' if self.app.camera_running else 'เปิดกล้อง')
+
+    def toggle_language(self):
+        try:self.locale.set_language('en' if self.locale.language=='th' else 'th')
+        except OSError as error:
+            messagebox.showerror(self.locale.text('ยังไม่ได้เปลี่ยนค่า'),str(error),parent=self.root)
+
+    def refresh_language(self):
+        self.language_button.configure(text='EN' if self.locale.language=='th' else 'ไทย')
+        self.set_music(self.music)
 
     def render_frame(self,rgb):
         self.rgb=rgb
@@ -432,8 +461,8 @@ class MusicUI:
         self.music=data
         connected=data.get('connected',False)
         self.status.set('Apple Music · เชื่อมต่อแล้ว' if connected else data.get('message','ยังไม่ได้เชื่อมต่อ'))
-        self.title.set(data.get('title','ยังไม่มีเพลงที่กำลังฟัง'))
-        self.artist.set(data.get('artist','เปิด Apple Music แล้วเริ่มเพลง'))
+        self.title.set(data.get('title') or self.locale.text('ยังไม่มีชื่อเพลง' if connected else 'ยังไม่มีเพลงที่กำลังฟัง'))
+        self.artist.set(data.get('artist') or self.locale.text('ไม่ระบุศิลปิน' if connected else 'เปิด Apple Music แล้วเริ่มเพลง'))
         self.playback.set({'PLAYING':'กำลังเล่น','PAUSED':'พักเพลง','STOPPED':'หยุดเล่น'}.get(data.get('status'),'ยังไม่ได้เล่นเพลง'))
         width=max(220,self.mini_details_frame.winfo_width())
         def fit(text,size):
