@@ -20,6 +20,7 @@ from gesture_features import features, FEATURE_VERSION
 from revision_validation import revision_checks
 from joint_features import JointFeatures
 from combined_features import CombinedFeatures
+from label_review import load_reviews, exclusion_for
 
 BASE=Path(__file__).resolve().parent
 LABELS=['neutral','next','previous','toggle']
@@ -34,6 +35,8 @@ def main():
     parser.add_argument("--exclude-session",action="append",default=[],help="Explicitly exclude abandoned sessions; recorded in model provenance")
     parser.add_argument("--activate",action="store_true",help="Explicitly make a revision the live model after reviewing its report")
     options=parser.parse_args()
+    reviews=load_reviews(BASE/'data'/'label_review.json')
+    excluded_clips=[]
     history_path=BASE/'evaluation_history.json'
     history=json.loads(history_path.read_text(encoding='utf-8')) if history_path.exists() else {'test_sessions':[]}
     previously_evaluated=set(history['test_sessions'])
@@ -55,6 +58,10 @@ def main():
             path=directory/clip['csv']
             checksum=hashlib.sha256(path.read_bytes()).hexdigest()
             if checksum!=clip['sha256']: raise RuntimeError('Input hash mismatch')
+            review=exclusion_for(reviews,session['session_id'],clip,checksum)
+            if review is not None:
+                excluded_clips.append(review)
+                continue
             inputs.append({'file':str(path.relative_to(BASE)),'sha256':checksum})
             with path.open(encoding='utf-8',newline='') as file:
                 for row in csv.DictReader(file):
@@ -64,6 +71,8 @@ def main():
                     elapsed.append(float(row['elapsed_seconds']));clip_groups.append(session['session_id']+':'+row['clip_id'])
                     y.append(row['label']); hand.append(session['verified_actual_hand']); split.append(row['split'])
                     groups.append(session['session_id']+':'+row['round_id']); clip_ids.append(row['clip_id'])
+    if set(reviews)!={entry['input'] for entry in excluded_clips}:
+        raise RuntimeError('Reviewed clip is missing from the accepted source audit')
     X=np.asarray(X); y=np.asarray(y); hand=np.asarray(hand); split=np.asarray(split); groups=np.asarray(groups); kinds=np.asarray(kinds);elapsed=np.asarray(elapsed);clip_groups=np.asarray(clip_groups)
     require_revision=options.require_three_finger_validation or 'three_finger_negative' in kinds
     for a,b in [('train','validation'),('train','test'),('validation','test')]:
@@ -127,7 +136,7 @@ def main():
     if require_revision:
         eligible=[trial for trial in revision_trials if trial['checks']['passed']]
         if not eligible:
-            dump(BASE/'three_finger_validation_attempt.json',{'trials':revision_trials,'published':False})
+            dump(BASE/'three_finger_validation_attempt.json',{'trials':revision_trials,'published':False,'excluded_clips':excluded_clips})
             raise RuntimeError('No candidate passed all-command/three-finger validation; current model unchanged, test not evaluated')
         selected_revision=max(eligible,key=lambda t:t['selection_score'])
         best_index=selected_revision['model_index']
@@ -154,6 +163,7 @@ def main():
             'threshold_selection':'validation only','temporal_settings':'engineering defaults; not tuned on test',
             'counts':{s:int(np.sum(split==s)) for s in ['train','validation','test']},'inputs':inputs}
     config['excluded_sessions']=[{'session_id':session['session_id'],'complete':session['complete'],'reason':'explicit operator exclusion'} for session in excluded]
+    config['excluded_clips']=excluded_clips
     config['baseline_validation']=baseline_validation
     config['collection_kinds']=sorted(set(kinds.tolist()))
     config['revision_validation']=selected_revision['checks'] if selected_revision else None
