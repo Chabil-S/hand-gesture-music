@@ -1,0 +1,9 @@
+{
+  "minimum_command_recall": 0.85,
+  "scope": "minimum accepted recall for each command on each hand in validation",
+  "authorization": "User requested changing the target from 95 percent to 85 percent for local live trial",
+  "runtime_score_threshold": 0.8,
+  "base_neutral_recall_requirement": 0.95,
+  "maximum_three_finger_or_neutral_command_events": 0,
+  "maximum_validation_command_delay_seconds": 1.5
+}
