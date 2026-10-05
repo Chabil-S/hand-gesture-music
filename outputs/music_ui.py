@@ -1,6 +1,7 @@
 """Merino / Rock Blue / Venice Blue desktop views for the live controller."""
 import tkinter as tk
 from tkinter import messagebox
+from tkinter import font as tkfont
 from PIL import Image, ImageTk, ImageOps, ImageDraw
 
 FONT = 'Leelawadee UI'
@@ -112,6 +113,9 @@ class MusicUI:
         self.status = tk.StringVar(value='เปิด Apple Music และเริ่มเพลงเพื่อเชื่อมต่อ')
         self.title = tk.StringVar(value='ยังไม่มีเพลงที่กำลังฟัง')
         self.artist = tk.StringVar(value='เปิด Apple Music แล้วเริ่มเพลง')
+        self.mini_title = tk.StringVar(value='ยังไม่มีเพลงที่กำลังฟัง')
+        self.mini_details = tk.StringVar(value='เปิด Apple Music แล้วเริ่มเพลง')
+        self.mini_status = tk.StringVar(value='ยังไม่ได้เชื่อมต่อ')
         self.playback = tk.StringVar(value='ยังไม่ได้เชื่อมต่อ')
         self.cover_hint = tk.StringVar(value='ยังไม่มีภาพปกจาก Apple Music')
         self.confidence = tk.StringVar(value='—')
@@ -215,18 +219,22 @@ class MusicUI:
         tk.Frame(aside,bg=LINE,height=1).pack(fill='x')
         self.label(aside,self.threshold,10,MUTED).pack(anchor='w',pady=(14,3))
         self.label(aside,self.release,10,MUTED).pack(anchor='w')
-        mini=tk.Frame(page,bg=CREAM,pady=8);mini.pack(fill='x')
-        self.mini_cover=tk.Label(mini,bg=SKY,width=48,height=48)
-        self.mini_cover.pack(side='left',padx=(0,12));self.covers.append((self.mini_cover,48))
-        self.label(mini,self.title,12,bold=True,wrap=480).pack(side='left')
-        SoftButton(mini,'ดูหน้ากำลังฟัง',lambda:self.show('music'),width=150).pack(side='right')
+        mini=tk.Frame(page,bg=SOFT,padx=16,pady=12);mini.pack(fill='x',pady=(4,0))
+        self.mini_cover=tk.Label(mini,bg=SOFT,width=64,height=64,bd=0,highlightthickness=0)
+        self.mini_cover.pack(side='left',padx=(0,14));self.covers.append((self.mini_cover,64))
+        SoftButton(mini,'ดูหน้ากำลังฟัง',lambda:self.show('music'),width=160,icon='music').pack(side='right',padx=(14,0))
+        details=tk.Frame(mini,bg=SOFT);details.pack(side='left',fill='x',expand=True)
+        self.label(details,self.mini_title,13,bold=True).pack(anchor='w')
+        self.label(details,self.mini_details,11,MUTED).pack(anchor='w')
+        self.label(details,self.mini_status,11,BLUE).pack(anchor='w')
+        self.mini_details_frame=details
 
     def build_music(self,page):
         self.page_heading(page,'Now playing',None)
         body=tk.Frame(page,bg=CREAM);body.pack(fill='both',expand=True)
         aside=tk.Frame(body,bg=CREAM,width=245);aside.pack(side='right',fill='y',padx=(30,0));aside.pack_propagate(False)
         focus=tk.Frame(body,bg=CREAM);focus.pack(side='left',fill='both',expand=True)
-        self.cover=tk.Label(focus,bg=CREAM)
+        self.cover=tk.Label(focus,bg=CREAM,bd=0,highlightthickness=0)
         self.cover.pack(pady=(2,16));self.covers.append((self.cover,285))
         self.label(focus,self.cover_hint,9,MUTED).pack()
         self.label(focus,self.title,22,bold=True,wrap=430).pack(pady=(0,3))
@@ -372,12 +380,22 @@ class MusicUI:
         self.title.set(data.get('title','ยังไม่มีเพลงที่กำลังฟัง'))
         self.artist.set(data.get('artist','เปิด Apple Music แล้วเริ่มเพลง'))
         self.playback.set({'PLAYING':'กำลังเล่น','PAUSED':'พักเพลง','STOPPED':'หยุดเล่น'}.get(data.get('status'),'ยังไม่ได้เล่นเพลง'))
+        width=max(220,self.mini_details_frame.winfo_width())
+        def fit(text,size):
+            font=tkfont.Font(family=FONT,size=size)
+            if font.measure(text)<=width:return text
+            while text and font.measure(text+'…')>width:text=text[:-1]
+            return text+'…'
+        self.mini_title.set(fit(self.title.get(),13))
+        details=' · '.join(part for part in (data.get('artist'),data.get('album')) if part)
+        self.mini_details.set(fit(details or self.artist.get(),11))
         cover=data.get('cover')
         self.cover_hint.set('' if cover is not None else 'ยังไม่มีภาพปกจาก Apple Music')
         if cover is not self.cover_image:
             self.cover_image=cover;self.render_cover()
         for button,key in self.transport:button.configure(state='normal' if connected and data.get(key) and not self.app.busy else 'disabled')
         position=data.get('position_seconds',0);duration=data.get('duration_seconds',0)
+        self.mini_status.set(self.playback.get()+(f'  ·  {time_text(position)} / {time_text(duration)}' if duration>0 else ''))
         self.times.set(f'{time_text(position)}  /  {time_text(duration)}' if duration>0 else 'ไม่มีข้อมูลระยะเวลาเพลง')
         self.timeline.delete('all')
         self.timeline.create_rectangle(0,0,self.timeline.winfo_width()*min(1,position/duration) if duration else 0,5,fill=BLUE,outline='')
@@ -392,6 +410,6 @@ class MusicUI:
             else:picture=ImageOps.fit(self.cover_image,(size,size),method=Image.Resampling.LANCZOS)
             mask=Image.new('L',(size,size),0)
             ImageDraw.Draw(mask).rounded_rectangle((0,0,size,size),radius=min(16,size//5),fill=255)
-            background=Image.new('RGB',(size,size),CREAM);background.paste(picture,(0,0),mask)
+            background=Image.new('RGB',(size,size),label.master.cget('bg'));background.paste(picture,(0,0),mask)
             self.photos['cover'+str(i)]=ImageTk.PhotoImage(background)
             label.configure(image=self.photos['cover'+str(i)],width=size,height=size)
