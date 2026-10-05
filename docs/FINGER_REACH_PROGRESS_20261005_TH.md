@@ -50,7 +50,7 @@ Replay พิกัดจาก session สดเดิม `20261005_154257_201a
 
 latest diagnostic ชี้รุ่นใหม่เพื่อวินิจฉัยเท่านั้น (`eligible_for_activation=false`, `full_validation_passed=false`) รุ่นควบคุมเพลงยังเป็น `20261004_221121` ตรวจแฮช latest_model.json และ evaluation_history.json ก่อน/หลังแล้วตรงกัน ไม่ประเมิน test ใหม่ โมเดลฝึกจาก train 4,646 เฟรม เลือกจาก validation 1,655 เฟรม; test 1,656 เฟรมเป็นจำนวนข้อมูลที่มี ไม่ใช่จำนวนที่ประเมินรอบนี้
 
-ตัวเก็บเพิ่ม: `outputs/เก็บนิ้วโป้งขวาเพิ่ม.cmd` เปิด `collect_thumb_focus.py` สำหรับมือขวา ท่า previous เท่านั้น 3 ช่วง ช่วงละ 12 วินาที:
+ตัวเก็บเพิ่ม: `outputs/collect_right_thumb_supplement.cmd` เปิด `collect_thumb_focus.py` สำหรับมือขวา ท่า previous เท่านั้น 3 ช่วง ช่วงละ 12 วินาที:
 
 1. ฝ่ามือเข้ากล้องและเอียงช้า ๆ
 2. หลังมือเข้ากล้องและเอียงช้า ๆ

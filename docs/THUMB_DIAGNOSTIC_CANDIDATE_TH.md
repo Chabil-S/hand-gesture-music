@@ -23,7 +23,7 @@
 
 ## ทดลองจากกล้องเดียวกัน
 
-เปิด `D:\hand-gesture-music\outputs\ทดลองรุ่นแก้นิ้วโป้ง.cmd` หน้าต่างแสดง:
+เปิด `D:\hand-gesture-music\outputs\compare_thumb_candidate.cmd` หน้าต่างแสดง:
 
 - รุ่นเก่าก่อนแก้สามนิ้ว 0.60
 - รุ่นปัจจุบัน Joint Logistic 0.80
