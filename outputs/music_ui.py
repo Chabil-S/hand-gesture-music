@@ -122,6 +122,8 @@ class MusicUI:
         self.hold = tk.StringVar(value='พร้อมรับท่า')
         self.threshold = tk.StringVar()
         self.release = tk.StringVar()
+        self.timing = tk.StringVar()
+        self.control_state = tk.StringVar(value='โหมดดูผล')
         self.camera_caption = tk.StringVar(value='เปิดกล้องเพื่อลองท่า')
         self.settings_values = {}
         self.header()
@@ -145,7 +147,6 @@ class MusicUI:
         self.build_camera(self.pages['camera'])
         self.build_music(self.pages['music'])
         self.build_settings(self.pages['settings'])
-        self.footer()
         self.refresh_settings()
         self.show('camera')
 
@@ -169,7 +170,6 @@ class MusicUI:
         left=tk.Frame(row,bg=CREAM);left.pack(side='left')
         self.label(left,eyebrow,11 if title else 22,MUTED if title else INK,bold=not title).pack(anchor='w')
         if title:self.label(left,title,22,bold=True).pack(anchor='w')
-        self.label(row,self.app.mode,10,MUTED,wrap=230).pack(side='right')
 
     def camera_box(self, parent, small=False):
         box=tk.Frame(parent,bg=CAMERA)
@@ -186,8 +186,13 @@ class MusicUI:
         return box
 
     def control(self, parent):
-        button=SoftButton(parent,'เริ่มควบคุมเพลง',self.app.toggle_control,primary=True)
-        button.pack(fill='x',pady=(12,8));button.configure(state='disabled')
+        group=tk.Frame(parent,bg=SOFT,padx=10,pady=10)
+        group.pack(fill='x',pady=(12,8))
+        self.label(group,self.control_state,12,BLUE,bold=True,wrap=210).pack(anchor='w')
+        button=SoftButton(group,'เริ่มควบคุมเพลง',self.app.toggle_control,primary=True)
+        button.pack(fill='x',pady=(8,8));button.configure(state='disabled')
+        self.label(group,self.timing,11,INK,wrap=210).pack(anchor='w')
+        self.label(group,'ปล่อยมือก่อนคำสั่งใหม่\nค้างมือไม่สั่งซ้ำ',11,MUTED,wrap=210).pack(anchor='w',pady=(5,0))
         self.controls.append(button)
         return button
 
@@ -215,10 +220,9 @@ class MusicUI:
         self.hold_bar=tk.Canvas(aside,height=6,bg=SOFT,highlightthickness=0)
         self.hold_bar.pack(fill='x')
         self.control_button=self.control(aside)
-        self.label(aside,self.app.feedback,10,MUTED,wrap=230).pack(anchor='w',pady=(8,18))
+        self.label(aside,self.app.feedback,11,INK,wrap=230).pack(anchor='w',pady=(4,10))
         tk.Frame(aside,bg=LINE,height=1).pack(fill='x')
         self.label(aside,self.threshold,10,MUTED).pack(anchor='w',pady=(14,3))
-        self.label(aside,self.release,10,MUTED).pack(anchor='w')
         mini=tk.Frame(page,bg=SOFT,padx=16,pady=12);mini.pack(fill='x',pady=(4,0))
         self.mini_cover=tk.Label(mini,bg=SOFT,width=64,height=64,bd=0,highlightthickness=0)
         self.mini_cover.pack(side='left',padx=(0,14));self.covers.append((self.mini_cover,64))
@@ -249,11 +253,10 @@ class MusicUI:
             b=SoftButton(actions,text,lambda a=action:self.app.manual_request(a),primary=action=='toggle',width=105)
             b.pack(side='left',padx=4);b.configure(state='disabled');self.transport.append((b,key))
         self.label(focus,'ปุ่มเพลงสั่งงานทันที · โหมดดูผลใช้กับท่ามือ',9,MUTED).pack(pady=(10,0))
-        camera=self.camera_box(aside,True);camera.pack(fill='x');camera.configure(height=235);camera.pack_propagate(False)
+        camera=self.camera_box(aside,True);camera.pack(fill='x');camera.configure(height=200);camera.pack_propagate(False)
         self.label(aside,self.app.pose,16,bold=True,wrap=230).pack(anchor='w',pady=(15,0))
         self.control(aside)
-        self.label(aside,'สลับมุมมองได้โดยไม่หยุดรับท่า',9,MUTED).pack(anchor='w')
-        self.guide(aside)
+        self.label(aside,'สลับมุมมองได้โดยไม่หยุดรับท่า',11,MUTED,wrap=230).pack(anchor='w',pady=(0,10))
         SoftButton(aside,'ขยายกล้องและดูผล',lambda:self.show('camera')).pack(fill='x')
         self.label(page,self.app.feedback,10,MUTED,wrap=850).pack(anchor='w',pady=(8,0))
 
@@ -299,12 +302,6 @@ class MusicUI:
         SoftButton(buttons,'บันทึกและใช้ค่า',self.save_settings,primary=True,width=170).pack(side='right')
         SoftButton(buttons,'คืนค่าที่รุ่นเคยทดสอบ',self.restore_settings,width=205).pack(side='right',padx=12)
 
-    def footer(self):
-        tk.Frame(self.root,bg=LINE,height=1).pack(fill='x')
-        row=tk.Frame(self.root,bg=CREAM,padx=22,pady=9);row.pack(fill='x')
-        self.label(row,self.app.mode,10,MUTED).pack(side='left')
-        self.label(row,self.app.timing_text,10,MUTED).pack(side='right')
-
     def show(self,name):
         self.view=name
         for key,page in self.pages.items():
@@ -322,6 +319,7 @@ class MusicUI:
             value.set(f'{self.app.config[key]*100:g}' if key=='threshold' else f'{self.app.config[key]:g}')
         self.threshold.set(f'คะแนนขั้นต่ำรับท่า {self.app.config["threshold"]:.0%}')
         self.release.set(f'เวลาปล่อยมือ {self.app.config["release_seconds"]:g} วินาที')
+        self.timing.set(f'ค้าง {self.app.config["hold_seconds"]:g} วินาที · ปล่อย {self.app.config["release_seconds"]:g} วินาที')
         self.sync_slider(self.app.config['threshold']*100)
 
     def sync_slider(self,value):
@@ -346,6 +344,7 @@ class MusicUI:
         self.refresh_settings();self.show('camera')
 
     def sync_controls(self):
+        self.control_state.set('กำลังควบคุมด้วยมือ' if self.app.armed else 'โหมดดูผล · ยังไม่ส่งคำสั่งมือ')
         for b in self.controls:
             b.configure(text='พักการควบคุม' if self.app.armed else 'เริ่มควบคุมเพลง',
                         state='normal' if self.app.camera_running and self.app.last_frame is not None else 'disabled')
