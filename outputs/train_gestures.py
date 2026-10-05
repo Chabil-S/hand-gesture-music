@@ -18,7 +18,7 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 from gesture_features import features, FEATURE_VERSION
 from revision_validation import revision_checks
-from joint_features import JointFeatures, ArticulatedFeatures
+from joint_features import JointFeatures, ArticulatedFeatures, FingerReachFeatures
 from combined_features import CombinedFeatures
 from label_review import load_reviews, exclusion_for
 
@@ -110,6 +110,8 @@ def main():
         ('Articulated SVC gamma=0.01',make_pipeline(ArticulatedFeatures(),StandardScaler(),SVC(C=1,gamma=.01,probability=True,random_state=42))),
         ('Articulated SVC gamma=0.1',make_pipeline(ArticulatedFeatures(),StandardScaler(),SVC(C=1,gamma=.1,probability=True,random_state=42))),
         ('Articulated ExtraTrees',make_pipeline(ArticulatedFeatures(),ExtraTreesClassifier(n_estimators=300,random_state=42,n_jobs=-1))),
+        ('FingerReach SVC RBF C=1',make_pipeline(FingerReachFeatures(),StandardScaler(),SVC(C=1,probability=True,random_state=42))),
+        ('FingerReach SVC RBF C=10',make_pipeline(FingerReachFeatures(),StandardScaler(),SVC(C=10,probability=True,random_state=42))),
     ]
     baseline_validation=None
     if require_revision and (BASE/'latest_model.json').exists():

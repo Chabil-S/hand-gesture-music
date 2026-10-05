@@ -42,3 +42,29 @@ class ArticulatedFeatures(JointFeatures):
         for pair in pairs:
             if pair not in DISTANCES:extra.append(distance(*pair))
         return np.column_stack([original,*extra])
+
+
+class FingerReachFeatures(ArticulatedFeatures):
+    """Add bone-length-normalized reach and direction to describe finger folding.
+
+    Keeps the articulated descriptors, so rejection of an extended thumb in a
+    three-finger pose can still use its relation to the palm and other fingers.
+    All ratios are geometric features, not hand-written command thresholds.
+    """
+    def transform(self,X):
+        X=np.asarray(X,dtype=float)
+        original=super().transform(X)
+        def distance(a,b):return X[:,LOOKUP[tuple(sorted((a,b)))]]
+        extra=[];lengths=[]
+        chains=[(1,2,3,4),(5,6,7,8),(9,10,11,12),(13,14,15,16),(17,18,19,20)]
+        for a,b,c,d in chains:
+            length=distance(a,b)+distance(b,c)+distance(c,d)
+            lengths.append(length)
+            extra.append(distance(a,d)/np.maximum(length,1e-10))
+            extra.append(distance(b,d)/np.maximum(distance(b,c)+distance(c,d),1e-10))
+            palm=distance(0,a);reach=distance(a,d);wrist_tip=distance(0,d)
+            extra.append(np.clip((palm*palm+reach*reach-wrist_tip*wrist_tip)
+                                 /np.maximum(2*palm*reach,1e-10),-1,1))
+        for i in range(1,5):
+            extra.append(distance(4,chains[i][-1])/np.maximum(lengths[0]+lengths[i],1e-10))
+        return np.column_stack([original,*extra])
