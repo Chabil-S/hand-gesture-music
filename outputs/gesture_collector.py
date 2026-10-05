@@ -121,17 +121,17 @@ class Collector:
             self.title.set('เก็บข้อมูลครบแล้ว')
             self.instruction.set('ขั้นต่อไป: ตรวจข้อมูล แล้วฝึกและเลือกโมเดล')
             self.record_button.configure(state='disabled')
-            self.timer.set('เก็บอีกข้างด้วยปุ่มด้านล่าง เมื่อครบทั้งสองข้างให้แจ้งในแชท' if self.negative else 'ส่งข้อความ “เก็บครบแล้ว” ในแชท')
+            self.timer.set('เก็บอีกข้างด้วยปุ่มด้านล่าง เมื่อครบทั้งสองข้างให้แจ้งในแชท' if self.negative or self.wide_angles else 'ส่งข้อความ “เก็บครบแล้ว” ในแชท')
             self.new_hand_button.pack(fill='x',pady=(0,8))
             return
         purpose={'train':'ชุดฝึก','validation':'ชุดเลือกโมเดล','test':'ชุดทดสอบท้ายงาน'}[self.splits[self.round]]
         _,action,pose,hint=self.classes[self.gesture]
         self.title.set(f'มือ{self.hand.get()} • รอบ {self.round+1}/{len(self.splits)}\n{purpose} • {action} — {pose}')
-        if self.negative and self.wide_angles:
+        if self.wide_angles:
             hint=['หันฝ่ามือเข้ากล้อง ขยับระยะและเอียงซ้าย/ขวา',
                   'หันหลังมือเข้ากล้อง ขยับระยะและเอียงซ้าย/ขวา',
                   'พลิกหน้ามือและหลังมือช้า ๆ พร้อมเปลี่ยนมุมและระยะ',
-                  'ลองมุมผสมทั้งหน้ามือ/หลังมือ คงสามนิ้วไว้',
+                  'ลองมุมผสมทั้งหน้ามือ/หลังมือ คงท่าตามป้ายไว้',
                   'ลองใหม่อย่างอิสระทั้งหน้ามือ/หลังมือและมุมที่ใช้จริง'][self.round]
         self.instruction.set(hint+'\nชูโป้ง ชี้ กลางให้ครบตลอดช่วง' if self.negative else hint+'\nขยับระยะและมุมเล็กน้อยขณะคงท่าเดิม')
 
@@ -343,5 +343,4 @@ if __name__=='__main__':
     parser.add_argument('--negative',action='store_true')
     parser.add_argument('--wide-angles',action='store_true')
     options=parser.parse_args()
-    if options.wide_angles and not options.negative:parser.error('--wide-angles requires --negative')
     Collector('ซ้าย' if options.hand=='left' else 'ขวา',options.negative,options.wide_angles).root.mainloop()
