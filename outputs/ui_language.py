@@ -4,6 +4,8 @@ import re
 import tkinter as tk
 
 EN = {
+    'กำมือ: เล่น/พัก · V: ถัดไป · โป้ง: ก่อนหน้า':'Fist: play/pause · V: next · thumb: previous',
+    'จีบ: เสียง · แบมือ: พัก/เริ่มควบคุม':'Pinch: volume · palm: pause/enable gestures',
     'เปิด Apple Music และเล่นเพลงเพื่อปรับเสียง':'Open Apple Music and play a track to adjust volume',
     'พบช่องเสียง Apple Music หลายช่อง · ยังไม่ปรับเสียง':'Multiple Apple Music audio sessions · volume unchanged',
     'ปรับเสียงไม่ได้':'Volume adjustment unavailable',

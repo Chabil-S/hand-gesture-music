@@ -262,13 +262,12 @@ class MusicUI:
             self.label(item,command,11,bold=True).pack(anchor='w')
 
     def build_camera(self,page):
-        self.page_heading(page,'CAMERA VIEW','เห็นท่า เห็นคำสั่ง')
         body=tk.Frame(page,bg=CREAM);body.pack(fill='both',expand=True)
         aside=tk.Frame(body,bg=CREAM,width=235);aside.pack(side='right',fill='y',padx=(22,0));aside.pack_propagate(False)
         left=tk.Frame(body,bg=CREAM);left.pack(side='left',fill='both',expand=True)
         self.camera_box(left).pack(fill='both',expand=True)
         self.video=self.videos[-1]
-        self.guide(left,True)
+        self.label(left,'กำมือ: เล่น/พัก · V: ถัดไป · โป้ง: ก่อนหน้า\nจีบ: เสียง · แบมือ: พัก/เริ่มควบคุม',11,MUTED,wrap=700).pack(anchor='w',pady=(8,6))
         self.label(aside,'ท่าที่ตรวจพบ',10,MUTED).pack(anchor='w',pady=(12,0))
         self.label(aside,self.app.pose,22,bold=True,wrap=230).pack(anchor='w',pady=(4,16))
         self.confidence_group=tk.Frame(aside,bg=CREAM)
@@ -286,10 +285,10 @@ class MusicUI:
         self.mini_cover=tk.Label(mini,bg=SOFT,width=64,height=64,bd=0,highlightthickness=0)
         self.mini_cover.pack(side='left',padx=(0,14));self.covers.append((self.mini_cover,64))
         SoftButton(mini,'ดูหน้ากำลังฟัง',lambda:self.show('music'),width=160).pack(side='right',padx=(14,0))
+        self.label(mini,self.mini_status,11,BLUE,wrap=165).pack(side='right',padx=(12,0))
         details=tk.Frame(mini,bg=SOFT);details.pack(side='left',fill='x',expand=True)
         self.label(details,self.mini_title,13,bold=True).pack(anchor='w')
         self.label(details,self.mini_details,11,MUTED).pack(anchor='w')
-        self.label(details,self.mini_status,11,BLUE).pack(anchor='w')
         self.mini_details_frame=details
 
     def build_music(self,page):
@@ -507,8 +506,9 @@ class MusicUI:
         self.rgb=rgb
         for i,video in enumerate(self.videos):
             if not video.winfo_viewable():continue
-            picture=Image.fromarray(rgb)
-            picture.thumbnail((max(1,video.winfo_width()-8),max(1,video.winfo_height()-8)),Image.Resampling.LANCZOS)
+            picture=ImageOps.contain(Image.fromarray(rgb),
+                                    (max(1,video.winfo_width()-8),max(1,video.winfo_height()-8)),
+                                    Image.Resampling.LANCZOS)
             self.photos['video'+str(i)]=ImageTk.PhotoImage(picture)
             video.configure(image=self.photos['video'+str(i)],text='')
 
