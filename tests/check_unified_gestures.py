@@ -101,6 +101,32 @@ assert music==before_music+['toggle']
 
 # Other neutral hands and changes of detection order preserve the active pinch.
 release()
+hold('neutral',pinch(.5),15)  # relaxed partial pinch never activates
+assert not app.gate.latched and not app.pinch.active
+before_music=list(music)
+hold('toggle',frames=18)
+assert music==before_music+['toggle']
+release();hold('neutral',pinch(.15),3)
+assert not app.gate.latched  # brief entry is also not a confirmed command
+hold('toggle',frames=18)
+assert music==before_music+['toggle','toggle']
+release();hold('neutral',palm,3)
+assert not app.gate.latched
+hold('previous',frames=18)
+assert music[-1]=='previous_track'
+
+# Slow camera absence releases the latch; idle ticks alone never do so.
+release();app.gate.reset();app.gate.latched=True
+feed([])
+release_started=app.gate.release_since
+app.last_frame=time.monotonic()-1.
+with patch.object(app.root,'after',lambda *args:None):app.poll()
+assert app.gate.latched and app.gate.release_since==release_started
+clock+=.4;feed([])
+assert not app.gate.latched
+
+
+release()
 for i in range(13):feed([(.3,'neutral',pinch(.15)),(.8,'neutral',None)])
 assert app.pinch.active
 for i in range(12):feed([(.8,'neutral',None),(.3,'neutral',pinch(.15+i*.03))])

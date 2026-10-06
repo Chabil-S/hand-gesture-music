@@ -193,7 +193,8 @@ class LiveApp(Collector):
         self.palm_feedback=palm
         if palm['reserved']:
             if self.dynamic_owner!='palm':
-                self.gate.reset();self.gate.latched=True
+                latched=self.gate.latched
+                self.gate.reset();self.gate.latched=latched
             self.dynamic_owner='palm'
             self.pinch.reset();self.volume.cancel()
             if palm.get('state')=='confirmed':
@@ -215,9 +216,12 @@ class LiveApp(Collector):
                 self.volume_feedback.set('ปล่อยมือก่อนเริ่มจีบ')
                 return True
             self.dynamic_owner='pinch'
-            self.gate.reset();self.gate.latched=True
+            self.gate.reset()
         was_active=self.pinch.active
         result=self.pinch.update(sample,timestamp)
+        # Reserve the frame immediately, but require release only after the
+        # gesture actually activates. Casual partial poses must not lock songs.
+        if self.pinch.active:self.gate.latched=True
         self.pinch_feedback=result
         if was_active and not self.pinch.active:self.volume.cancel()
         state=result['state']
@@ -311,7 +315,8 @@ class LiveApp(Collector):
                 self.detection.set('สองมือสั่งต่างกัน • รอให้เหลือท่าคำสั่งเดียว' if reason=='conflict'
                                    else f'พบ {frame["count"]} มือ • รับจากมือกรอบสีเขียว' if active is not None
                                    else 'รอมือสั่งงานกลับมา' if frame['count'] else 'ไม่พบมือ')
-                command=self.gate.update('uncertain' if reserved else label,frame['t'])
+                release_pose=reserved and label=='neutral' and not self.pinch.active and not self.palm_feedback.get('reserved',False)
+                command=self.gate.update('neutral' if release_pose else 'uncertain' if reserved else label,frame['t'])
                 if command:
                     if self.armed:
                         self.log({'event':'gesture_confirmed','action':command,'score':score,'mode':'control'})
@@ -327,7 +332,10 @@ class LiveApp(Collector):
         if self.last_frame is not None and time.monotonic()-self.last_frame>self.config['max_frame_gap_seconds']:
             self.reset_dynamic()
             self.ui.sync_controls()
-            self.gate.update('uncertain',time.monotonic())
+            # Stale UI ticks cancel confirmation, but are not camera observations.
+            # Do not erase an observed release on every tick between slow frames.
+            # No latch is released here: a new real release frame is required.
+            self.gate.candidate=None;self.gate.since=None
             self.pose.set('รอภาพกล้องใหม่')
             self.ui.render_gesture(0,time.monotonic())
         try:

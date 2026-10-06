@@ -46,3 +46,13 @@ results.get(timeout=2)
 assert results.get(timeout=2)[2]=='cancelled' and 'cancel_me' not in calls
 
 print('PASS: hand ordering, conflict handling, ordered commands, receive/release during wait, pause cancellation')
+
+# Slow observed absence must release; an uncertain outage must not count.
+gate=GestureGate();gate.latched=True
+for t in (0.,.4,.8):gate.update('no_hand',t)
+assert not gate.latched
+gate.reset();gate.latched=True
+for t,label in ((0.,'no_hand'),(.31,'uncertain'),(.4,'no_hand')):gate.update(label,t)
+assert gate.latched
+for t in (.5,.6,.8):gate.update('neutral',t)
+assert not gate.latched

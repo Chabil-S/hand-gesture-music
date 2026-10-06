@@ -28,13 +28,18 @@ class GestureGate:
         self.since=None
         self.release_since=None
         self.last_time=None
+        self.last_label=None
 
     def update(self, label, timestamp):
         if self.last_time is not None and timestamp-self.last_time > self.max_gap:
             self.candidate=None
             self.since=None
-            self.release_since=None
+            # Observed release frames may arrive slowly. An uncertain camera
+            # observation still breaks this sequence; idle UI ticks cannot release.
+            if label not in ('neutral','no_hand') or self.last_label not in ('neutral','no_hand'):
+                self.release_since=None
         self.last_time=timestamp
+        self.last_label=label
         if label in ('neutral', 'no_hand'):
             self.candidate=None
             self.since=None
