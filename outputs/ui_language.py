@@ -4,6 +4,7 @@ import re
 import tkinter as tk
 
 EN = {
+    'ธีมมืด':'Dark theme', 'ธีมสว่าง':'Light theme',
     'กำมือ: เล่น/พัก · V: ถัดไป · โป้ง: ก่อนหน้า':'Fist: play/pause · V: next · thumb: previous',
     'จีบ: เสียง · แบมือ: พัก/เริ่มควบคุม':'Pinch: volume · palm: pause/enable gestures',
     'เปิด Apple Music และเล่นเพลงเพื่อปรับเสียง':'Open Apple Music and play a track to adjust volume',
@@ -140,6 +141,16 @@ PATTERNS = [
 
 
 class Localizer:
+    def save_preference(self,key,value):
+        if not self.path:return
+        try:preferences=json.loads(self.path.read_text(encoding='utf-8'))
+        except (OSError,ValueError):preferences={}
+        if not isinstance(preferences,dict):preferences={}
+        preferences[key]=value
+        temp=self.path.with_suffix('.tmp')
+        temp.write_text(json.dumps(preferences,ensure_ascii=False)+'\n',encoding='utf-8')
+        temp.replace(self.path)
+
     def __init__(self,path=None,language=None):
         self.path=path
         self.language=language or 'th'
@@ -164,10 +175,7 @@ class Localizer:
 
     def set_language(self,language,persist=True):
         if language not in ('th','en'):raise ValueError(language)
-        if persist and self.path:
-            temp=self.path.with_suffix('.tmp')
-            temp.write_text(json.dumps({'language':language})+'\n',encoding='utf-8')
-            temp.replace(self.path)
+        if persist:self.save_preference('language',language)
         self.language=language
         for callback in self.callbacks:callback()
 

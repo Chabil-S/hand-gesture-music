@@ -1,5 +1,6 @@
-"""Merino / Rock Blue / Venice Blue desktop views for the live controller."""
+"""Light and monochrome dark desktop views for the live controller."""
 import tkinter as tk
+import json
 from tkinter import messagebox
 from tkinter import font as tkfont
 from PIL import Image, ImageTk, ImageOps, ImageDraw
@@ -14,6 +15,17 @@ MUTED = '#426477'
 LINE = '#D4DCCC'
 SOFT = '#E8E6D9'
 CAMERA = '#D4E1E3'
+FIELD = '#FCF8EF'
+
+LIGHT_PALETTE = {name: globals()[name] for name in
+                 ('CREAM','SKY','BLUE','INK','MUTED','LINE','SOFT','CAMERA','FIELD')}
+DARK_PALETTE = dict(CREAM='#101010', SKY='#2E2E2E', BLUE='#FFFFFF',
+                    INK='#F4F4F4', MUTED='#B8B8B8', LINE='#3D3D3D',
+                    SOFT='#242424', CAMERA='#1C1C1C', FIELD='#181818')
+PALETTES = {'light': LIGHT_PALETTE, 'dark': DARK_PALETTE}
+
+def set_palette(theme):
+    globals().update(PALETTES[theme])
 
 
 class SoftButton(tk.Canvas):
@@ -75,7 +87,8 @@ class NumberField(tk.Canvas):
         super().__init__(parent,width=width,height=52,bg=parent.cget('bg'),highlightthickness=0)
         self.unit=unit
         self.entry=tk.Entry(self,textvariable=variable,font=(FONT,20 if large else 15,'bold' if large else 'normal'),
-                            bg='#FCF8EF',fg=BLUE,insertbackground=BLUE,bd=0,highlightthickness=0,relief='flat')
+                            bg=FIELD,fg=BLUE,insertbackground=BLUE,selectbackground=BLUE,
+                            selectforeground=CREAM,bd=0,highlightthickness=0,relief='flat')
         self.bind('<Configure>',lambda e:self.draw())
         self.entry.bind('<FocusIn>',lambda e:self.draw())
         self.entry.bind('<FocusOut>',lambda e:self.draw())
@@ -85,7 +98,7 @@ class NumberField(tk.Canvas):
         self.delete('all')
         w=max(40,self.winfo_width() if self.winfo_width()>1 else int(self.cget('width')))
         self.create_polygon(14,2,w-14,2,w-2,2,w-2,14,w-2,38,w-2,50,w-14,50,
-                            14,50,2,50,2,38,2,14,2,2,smooth=True,fill='#FCF8EF',
+                            14,50,2,50,2,38,2,14,2,2,smooth=True,fill=FIELD,
                             outline=BLUE if self.entry.focus_get()==self.entry else SKY,width=1)
         self.entry.place(x=15,y=8,width=max(20,w-30-(28 if self.unit else 0)),height=36)
         if self.unit:self.create_text(w-22,27,text=self.unit,fill=MUTED,font=(FONT,12))
@@ -134,6 +147,14 @@ class MusicUI:
     def __init__(self, app):
         self.app, self.root = app, app.root
         self.locale=self.root.locale
+        self.theme='light'
+        if self.locale.path:
+            try:
+                preferences=json.loads(self.locale.path.read_text(encoding='utf-8'))
+                if isinstance(preferences,dict) and preferences.get('theme') in PALETTES:
+                    self.theme=preferences['theme']
+            except (OSError,ValueError):pass
+        set_palette(self.theme)
         self.view = 'camera'
         self.rgb = None
         self.cover_image = None
@@ -188,7 +209,8 @@ class MusicUI:
         self.locale.callbacks.append(self.refresh_language)
         self.refresh_language()
 
-    def label(self, parent, value, size=11, color=INK, wrap=0, bold=False):
+    def label(self, parent, value, size=11, color=None, wrap=0, bold=False):
+        if color is None:color=INK
         args={'textvariable':value} if isinstance(value,tk.Variable) else {'text':value}
         widget=tk.Label(parent, **args, font=(FONT,max(11,size),'bold' if bold else 'normal'),
                         bg=parent.cget('bg'),fg=color,anchor='w',justify='left',wraplength=wrap)
@@ -368,7 +390,11 @@ class MusicUI:
         SoftButton(buttons,'บันทึกและใช้ค่า',self.save_settings,primary=True,width=170).pack(side='right')
         SoftButton(buttons,'คืนค่าที่รุ่นเคยทดสอบ',self.restore_settings,width=225).pack(side='right',padx=12)
         # Deliberately absent from the normal settings surface and tab order.
-        self.language_button=SoftButton(form,'EN',self.toggle_language,width=100)
+        self.private_preferences=tk.Frame(form,bg=CREAM)
+        self.language_button=SoftButton(self.private_preferences,'EN',self.toggle_language,width=100)
+        self.language_button.pack(side='right')
+        self.theme_button=SoftButton(self.private_preferences,'ธีมมืด',self.toggle_theme,width=150)
+        self.theme_button.pack(side='right',padx=(0,8))
         self.root.bind('<Control-Shift-L>',self.reveal_language)
         self.root.bind('<Control-Shift-l>',self.reveal_language)
 
@@ -390,7 +416,7 @@ class MusicUI:
                  'พับกลาง–นาง–ก้อย · ค้างจีบหรือกาง 0.45 วินาที\nกางเพิ่ม · หุบลด · ปล่อยมือก่อนท่าเพลง'),
                 ('แบมือค้างเพื่อพัก / เริ่มควบคุม',self.palm_option,
                  'แบทั้งห้านิ้ว 1.2 วินาที แล้วปล่อย\nตรวจท่านี้ได้ระหว่างพัก ถ้ากล้องยังเปิดอยู่')]:
-                check=tk.Checkbutton(body,variable=variable,bg=CREAM,fg=INK,activebackground=CREAM,
+                check=tk.Checkbutton(body,variable=variable,bg=CREAM,fg=INK,activebackground=CREAM,activeforeground=INK,
                                      selectcolor=CREAM,font=(FONT,12,'bold'),anchor='w',bd=0)
                 self.locale.bind(check,source);check.pack(anchor='w',pady=(4,0))
                 self.label(body,description,11,MUTED,wrap=435).pack(anchor='w',padx=(25,0),pady=(3,10))
@@ -409,12 +435,12 @@ class MusicUI:
 
     def reveal_language(self,event=None):
         if self.view!='settings':return
-        if self.language_button.winfo_manager():self.language_button.pack_forget()
-        else:self.language_button.pack(anchor='e',pady=(6,0))
+        if self.private_preferences.winfo_manager():self.private_preferences.pack_forget()
+        else:self.private_preferences.pack(anchor='e',pady=(6,0))
         return 'break'
 
     def show(self,name):
-        if hasattr(self,'language_button'):self.language_button.pack_forget()
+        if hasattr(self,'private_preferences'):self.private_preferences.pack_forget()
         self.view=name
         for key,page in self.pages.items():
             page.pack_forget()
@@ -500,6 +526,41 @@ class MusicUI:
 
     def refresh_language(self):
         self.language_button.configure(text='EN' if self.locale.language=='th' else 'ไทย')
+        self.theme_button.configure(text='ธีมมืด' if self.theme=='light' else 'ธีมสว่าง')
+        self.set_music(self.music)
+
+    def toggle_theme(self):
+        theme='dark' if self.theme=='light' else 'light'
+        try:self.locale.save_preference('theme',theme)
+        except OSError as error:
+            messagebox.showerror(self.locale.text('ยังไม่ได้เปลี่ยนค่า'),str(error),parent=self.root)
+            return
+        self.apply_theme(theme)
+
+    def apply_theme(self,theme):
+        old=PALETTES[self.theme];new=PALETTES[theme]
+        replacements={color.lower():new[name] for name,color in old.items()}
+        self.theme=theme;set_palette(theme)
+        def recolor(widget):
+            options=widget.keys();changes={}
+            for key in ('background','foreground','activebackground','activeforeground',
+                        'disabledforeground','insertbackground','selectbackground',
+                        'selectforeground','selectcolor','highlightbackground','highlightcolor'):
+                if key in options:
+                    value=str(widget.cget(key)).lower()
+                    if value in replacements:changes[key]=replacements[value]
+            if changes:widget.configure(**changes)
+            if isinstance(widget,tk.Canvas):
+                for item in widget.find_all():
+                    for key in ('fill','outline'):
+                        try:value=widget.itemcget(item,key).lower()
+                        except tk.TclError:continue
+                        if value in replacements:widget.itemconfigure(item,**{key:replacements[value]})
+            for child in widget.winfo_children():recolor(child)
+            if isinstance(widget,(SoftButton,NumberField,ModernSlider)):widget.draw()
+        recolor(self.root)
+        self.theme_button.configure(text='ธีมมืด' if theme=='light' else 'ธีมสว่าง')
+        self.render_cover()
         self.set_music(self.music)
 
     def render_frame(self,rgb):
