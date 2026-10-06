@@ -18,7 +18,7 @@ palm={'open_palm':True,'pinch_pose':False,'aperture':2.}
 for volume in (False,True):
     for language in ('th','en'):
         app.root.locale.set_language(language,persist=False)
-        app.set_experimental(volume,True)
+        app.set_gesture_options(volume,True,persist=False)
         app.process_dynamic(palm,0)
         assert app.palm_feedback['state']=='release' and app.palm_feedback['progress']==0
         for i in range(9):app.process_dynamic(None,.1+i*.05)

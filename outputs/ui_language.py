@@ -4,6 +4,17 @@ import re
 import tkinter as tk
 
 EN = {
+    'ท่าควบคุม':'Gesture controls',
+    'ใช้ร่วมกับท่าเพลง · จำตัวเลือกเมื่อเปิดใหม่':'Works with track gestures · choices saved for next launch',
+    'จีบปรับเสียง Apple Music':'Pinch for Apple Music volume',
+    'กางเพิ่ม · หุบลด · ปล่อยมือก่อนท่าเพลง':'Open to raise · close to lower · release before track gestures',
+    'บันทึกท่าควบคุม':'Save gesture controls',
+    'จีบชี้–โป้ง':'Thumb–index pinch', 'เพิ่ม / ลดเสียง':'Raise / lower volume',
+    'แบมือค้าง 1.2 วินาที':'Open palm · hold 1.2 s', 'พัก / เริ่มควบคุม':'Pause / enable gestures',
+    'จีบชี้–โป้งเพื่อปรับเสียง':'Pinch thumb and index to adjust volume',
+    'ใช้ตัวเลือกท่าควบคุมแล้ว · อยู่ในโหมดดูผล':'Gesture options saved · preview active',
+    'ปิดท่าจีบปรับเสียง':'Pinch volume is off', 'ปล่อยมือก่อนเริ่มจีบ':'Release before starting a pinch',
+    'กำลังปรับเสียง':'Adjusting volume', 'ดูผลจีบ':'Pinch preview',
     'เริ่มควบคุมแล้ว · ปล่อยมือ':'Gestures enabled · release hand',
     'พักการควบคุมแล้ว · ปล่อยมือ':'Gestures paused · release hand',
     'ค้างจีบหรือกางปลายนิ้ว แล้วขยับเพื่อปรับเสียง':'Hold closed or open fingertips, then move to adjust volume',
@@ -105,6 +116,7 @@ EN = {
 }
 
 PATTERNS = [
+    (r'จีบค้าง ([\d.]+) / ([\d.]+) วินาที',r'Pinch \1 / \2 s'),
     (r'แบมือ ([\d.]+) วินาที · ปล่อย ([\d.]+) วินาที',r'Palm \1 s · release \2 s'),
     (r'ค้างจีบ ([\d.]+) วินาที · พับอีกสามนิ้ว',r'Hold pinch \1 s · fold the other fingers'),
     (r'แบมือค้าง ([\d.]+) / ([\d.]+) วินาที',r'Open palm \1 / \2 s'),

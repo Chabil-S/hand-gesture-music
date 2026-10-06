@@ -1,7 +1,7 @@
-"""Experimental landmark geometry and temporal policies; no trained-model changes.
+"""Landmark geometry and temporal policies used alongside trained song gestures.
 
-Distances use palm scale and aspect-corrected XYZ. These defaults still require
-the user's live validation; they are not measured recognition accuracy.
+Distances use palm scale and aspect-corrected XYZ. Numeric geometry thresholds
+are separate from, and do not represent, the trained classifier's accuracy.
 """
 import math
 import numpy as np
