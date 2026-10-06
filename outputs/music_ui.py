@@ -198,8 +198,6 @@ class MusicUI:
         title=tk.Frame(row,bg=CREAM);title.pack(side='left')
         self.label(title,'Gesture Music',20,bold=True).pack(anchor='w')
         self.label(title,'เพลงของคุณ ในจังหวะของมือ',10,MUTED).pack(anchor='w')
-        self.language_button=SoftButton(row,'EN',self.toggle_language,width=78)
-        self.language_button.pack(side='right',padx=(12,0))
         self.read_button=SoftButton(row,'อ่านสถานะ Apple Music',lambda:self.app.request('status'),width=225)
         self.read_button.pack(side='right')
         tk.Frame(self.root,bg=LINE,height=1).pack(fill='x')
@@ -344,8 +342,19 @@ class MusicUI:
         buttons=tk.Frame(form,bg=CREAM);buttons.pack(fill='x',pady=8)
         SoftButton(buttons,'บันทึกและใช้ค่า',self.save_settings,primary=True,width=170).pack(side='right')
         SoftButton(buttons,'คืนค่าที่รุ่นเคยทดสอบ',self.restore_settings,width=225).pack(side='right',padx=12)
+        # Deliberately absent from the normal settings surface and tab order.
+        self.language_button=SoftButton(form,'EN',self.toggle_language,width=100)
+        self.root.bind('<Control-Shift-L>',self.reveal_language)
+        self.root.bind('<Control-Shift-l>',self.reveal_language)
+
+    def reveal_language(self,event=None):
+        if self.view!='settings':return
+        if self.language_button.winfo_manager():self.language_button.pack_forget()
+        else:self.language_button.pack(anchor='e',pady=(6,0))
+        return 'break'
 
     def show(self,name):
+        if hasattr(self,'language_button'):self.language_button.pack_forget()
         self.view=name
         for key,page in self.pages.items():
             page.pack_forget()
