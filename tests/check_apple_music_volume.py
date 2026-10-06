@@ -8,6 +8,36 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'outputs'))
 import apple_music_volume as audio
 
+# The real playback helper is in the Apple Music package; idle UI sessions
+# cannot win over its active stream. Never choose among multiple active streams.
+assert audio.select_sessions([(0,'ui'),(1,'helper'),(0,'old helper')])==['helper']
+assert audio.select_sessions([(1,'a'),(1,'b'),(0,'ui')])==['a','b']
+assert audio.select_sessions([(0,'a'),(0,'b')])==['a','b']
+assert audio.select_sessions([(2,'expired')])==[]
+
+class Function:
+    def __init__(self,fn):self.fn=fn
+    def __call__(self,*args):return self.fn(*args)
+class Kernel:
+    def __init__(self,name,family):
+        self.closed=[]
+        self.OpenProcess=Function(lambda *args:42)
+        self.CloseHandle=Function(lambda handle:self.closed.append(handle))
+        def image(handle,flags,buffer,length):buffer.value=name;return 1
+        def package(handle,length,buffer):buffer.value=family;return 0
+        self.QueryFullProcessImageNameW=Function(image)
+        self.GetPackageFamilyName=Function(package)
+for executable,family,expected in (
+    ('AppleMusic.exe',audio.PACKAGE,True),
+    ('AMPLibraryAgent.exe',audio.PACKAGE,True),
+    ('AMPLibraryAgent.exe','AnotherPackage',False),
+    ('other.exe',audio.PACKAGE,False),
+):
+    kernel=Kernel(executable,family)
+    with patch.object(audio.C,'WinDLL',lambda *args,**kwargs:kernel):
+        assert audio.is_apple_music(123)==expected
+    assert kernel.closed==[42]
+
 
 @contextmanager
 def sessions(items):
@@ -50,4 +80,4 @@ assert not fake.writes
 fake.fail=True;worker.submit();assert worker.results.get(timeout=2)['reason']=='error'
 fake.fail=False;worker.submit();assert worker.results.get(timeout=2)['available']
 stop.set()
-print('PASS: exact-session scoping, no global fallback, bounds, mute preserved, cancellation, error recovery')
+print('PASS: packaged playback-helper identity, active-session selection, ambiguity rejection, bounds, mute preserved, cancellation, error recovery')

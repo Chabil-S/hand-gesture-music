@@ -12,6 +12,7 @@ import uuid
 from contextlib import ExitStack, contextmanager
 
 PACKAGE = 'AppleInc.AppleMusicWin_nzyj5cx40ttqa'
+APPLE_EXECUTABLES = frozenset({'applemusic.exe', 'amplibraryagent.exe'})
 GUID = C.c_ubyte * 16
 
 
@@ -60,11 +61,22 @@ def is_apple_music(pid):
             return False
         length = C.c_uint32(256)
         family = C.create_unicode_buffer(length.value)
-        return (os.path.basename(name.value).lower() == 'applemusic.exe'
+        return (os.path.basename(name.value).lower() in APPLE_EXECUTABLES
                 and kernel.GetPackageFamilyName(handle, C.byref(length), family) == 0
                 and family.value == PACKAGE)
     finally:
         kernel.CloseHandle(handle)
+
+
+def select_sessions(records):
+    """Prefer streams currently rendering audio over retained idle UI sessions.
+
+    Apple Music plays through its packaged AMPLibraryAgent helper. Its idle UI
+    process can retain a separate session whose volume does not affect music.
+    Multiple active matches remain ambiguous rather than choosing arbitrarily.
+    """
+    active = [volume for state, volume in records if state == 1]
+    return active or [volume for state, volume in records if state == 0]
 
 
 @contextmanager
@@ -113,8 +125,8 @@ def music_sessions():
                     call(control2, 3, (C.byref(state),), (C.c_void_p,))
                     if state.value != 2 and is_apple_music(pid.value):
                         volume = stack.enter_context(owned(query(control, '87CE5498-68D6-44E5-9215-6DA47EF883D8')))
-                        found.append(volume)
-            yield found
+                        found.append((state.value, volume))
+            yield select_sessions(found)
     finally:
         ole.CoUninitialize()
 
