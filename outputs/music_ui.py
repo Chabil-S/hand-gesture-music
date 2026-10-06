@@ -231,7 +231,7 @@ class MusicUI:
         button=SoftButton(group,'เริ่มควบคุมเพลง',self.app.toggle_control,primary=True)
         button.pack(fill='x',pady=(8,8));button.configure(state='disabled')
         self.label(group,self.timing,11,INK,wrap=210).pack(anchor='w')
-        self.label(group,'ปล่อยมือก่อนคำสั่งใหม่\nค้างมือไม่สั่งซ้ำ',11,MUTED,wrap=210).pack(anchor='w',pady=(5,0))
+        self.label(group,'ค้างท่า = 1 คำสั่ง',11,MUTED,wrap=210).pack(anchor='w',pady=(5,0))
         self.controls.append(button)
         return button
 

@@ -4,6 +4,8 @@ import re
 import tkinter as tk
 
 EN = {
+    'ปล่อยมือ แล้วทำท่าถัดไป':'Release, then make the next gesture.',
+    'ค้างท่า = 1 คำสั่ง':'One hold = one command',
     'มุมมอง':'VIEWS', 'จับท่าทาง':'Gestures', 'กำลังฟัง':'Now playing', 'ตั้งค่า':'Settings',
     'เพลงของคุณ ในจังหวะของมือ':'Your music, at your fingertips',
     'อ่านสถานะ Apple Music':'Refresh Apple Music', 'เห็นท่า เห็นคำสั่ง':'Gesture control',

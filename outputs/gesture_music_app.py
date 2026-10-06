@@ -209,7 +209,7 @@ class LiveApp(Collector):
                         self.feedback.set('ยืนยันท่า: '+NAMES[command]+'\nโหมดดูผล • ไม่ส่งเพลง\nเอามือออก แล้วลองท่าถัดไป')
                         self.log({'event':'gesture_confirmed','action':command,'score':score,'mode':'preview'})
                 elif self.gate.latched and not self.busy and self.last_prediction!=label and label not in ('no_hand','neutral'):
-                    self.feedback.set('ปล่อยท่าก่อน: เอามือออก หรือทำท่าไม่สั่งงาน\nค้างมือหรือเปลี่ยนท่าคำสั่งทันทีจะไม่สั่งซ้ำ')
+                    self.feedback.set('ปล่อยมือ แล้วทำท่าถัดไป')
                 self.last_prediction=label
                 self.ui.render_gesture(score,frame['t'])
         except queue.Empty:pass
