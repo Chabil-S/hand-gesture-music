@@ -53,6 +53,19 @@ for mcp in (9,13,17):
     pinched[mcp+3]=x,.65,0
 pinched[4]=pinched[8]+(.02,0,0)
 assert geometry(pinched.reshape(-1),640,480)['pinch_pose']
+fully_open=pinched.copy();fully_open[4]=(-.15,.6,0)
+wide=geometry(fully_open.reshape(-1),640,480)
+assert wide['aperture']>1.6 and wide['pinch_pose']
+for transform in (lambda p:p*np.array([-1,1,1]),lambda p:p*.7+.1):
+    assert geometry(transform(fully_open).reshape(-1),640,480)['pinch_pose']
+full_volume=PinchVolume();arm(full_volume,.15)
+wide_steps=[full_volume.update(pinch(.15+i*.05),.55+i*.05) for i in range(51)]
+assert full_volume.active
+assert any(step['delta'] is not None and step['delta']>0 for step in wide_steps[32:])
+full_volume.reset();arm(full_volume,2.5)
+closing=[full_volume.update(pinch(2.5-i*.045),.55+i*.05) for i in range(51)]
+assert full_volume.active and any(step['delta'] is not None and step['delta']<0 for step in closing)
+assert all(abs(step['delta'])<=.03 for step in wide_steps+closing if step['delta'] is not None)
 # A V sign or three fingers must not enter the volume pose.
 for fingers in ((9,), (9,13)):
     other=pinched.copy()

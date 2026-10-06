@@ -44,7 +44,9 @@ def geometry(coords, width, height):
     index_ready = index_ready or (aperture<.26 and index_angle>105 and index_tip_angle>110)
     return {
         'aperture':aperture,
-        'pinch_pose':bool(index_ready and all(folded[1:]) and aperture<1.6),
+        # Finger shape and palm quality identify the pose. A fixed aperture ceiling
+        # excludes a natural full thumb/index spread and breaks ongoing movement.
+        'pinch_pose':bool(index_ready and all(folded[1:]) and math.isfinite(aperture)),
         'open_palm':bool(all(extended) and np.linalg.norm(points[4]-points[5])/scale>.45),
     }
 
@@ -68,7 +70,7 @@ class PinchVolume:
             self.reset()
             return {'state':'waiting','delta':None}
         aperture=sample['aperture']
-        if not math.isfinite(aperture) or not 0<=aperture<=1.6:
+        if not math.isfinite(aperture) or aperture<0:
             self.reset()
             return {'state':'waiting','delta':None}
         if self.filtered is None:
