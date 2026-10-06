@@ -16,41 +16,12 @@ SOFT = '#E8E6D9'
 CAMERA = '#D4E1E3'
 
 
-def draw_icon(canvas, name, x, y, color):
-    """Small vector cues alongside text; no dependency on symbol fonts."""
-    def line(*points):canvas.create_line(*points,fill=color,width=2,capstyle='round',joinstyle='round')
-    if name=='camera':
-        canvas.create_rectangle(x-8,y-6,x+3,y+6,outline=color,width=2)
-        line(x+3,y-3,x+9,y-6,x+9,y+6,x+3,y+3)
-    elif name=='music':
-        canvas.create_oval(x-9,y-9,x+9,y+9,outline=color,width=2)
-        canvas.create_oval(x-2,y-2,x+2,y+2,outline=color,width=2)
-    elif name=='settings':
-        for dx,dy in [(-7,-3),(0,4),(7,-5)]:
-            line(x+dx,y-9,x+dx,y+9)
-            canvas.create_oval(x+dx-2,y+dy-2,x+dx+2,y+dy+2,fill=color,outline=color)
-    elif name=='pause':
-        line(x-4,y-7,x-4,y+7);line(x+4,y-7,x+4,y+7)
-    elif name in ('play','next','previous'):
-        direction=-1 if name=='previous' else 1
-        canvas.create_polygon(x-5*direction,y-7,x+5*direction,y,x-5*direction,y+7,fill=color)
-        if name!='play':line(x+8*direction,y-7,x+8*direction,y+7)
-    elif name=='refresh':
-        canvas.create_arc(x-8,y-8,x+8,y+8,start=30,extent=290,style='arc',outline=color,width=2)
-        line(x+8,y-9,x+8,y-3,x+2,y-3)
-    elif name=='language':
-        canvas.create_oval(x-9,y-9,x+9,y+9,outline=color,width=1.5)
-        canvas.create_oval(x-4,y-9,x+4,y+9,outline=color,width=1.5)
-        line(x-9,y,x+9,y)
-
-
 class SoftButton(tk.Canvas):
     """Rounded, keyboard-operable action with the configure API used by LiveApp."""
-    def __init__(self, parent, text, command, primary=False, width=210, icon=None):
+    def __init__(self, parent, text, command, primary=False, width=210):
         super().__init__(parent, width=width, height=44, bg=parent.cget('bg'),
                          highlightthickness=0, takefocus=1)
         self.text, self.command, self.primary = text, command, primary
-        self.icon=icon
         self.state = 'normal'
         self.text_font=tkfont.Font(family=FONT,size=12)
         self.bind('<Configure>', lambda e: self.draw())
@@ -91,18 +62,11 @@ class SoftButton(tk.Canvas):
         self.create_polygon(2+r,2,w-r-2,2,w-2,2,w-2,2+r,w-2,h-r,w-2,h,
                             w-r-2,h,r+2,h,2,h,2,h-r,2,r+2,2,2,
                             smooth=True, fill=fill, outline=BLUE if self.focus_get()==self else fill)
-        icons={'จับท่าทาง':'camera','กำลังฟัง':'music','ตั้งค่า':'settings','เปิดกล้อง':'camera','ปิดกล้อง':'camera',
-               'เริ่มควบคุมเพลง':'play','พักการควบคุม':'pause','ก่อนหน้า':'previous','ถัดไป':'next',
-               'เล่น / พัก':'play','อ่านสถานะ Apple Music':'refresh'}
-        icon=self.icon or icons.get(self.text)
         self.display_text=self.winfo_toplevel().locale.text(self.text)
         font=self.text_font; font.configure(size=12)
-        if font.measure(self.display_text)+(26 if icon else 0)>w-20:font.configure(size=11)
-        if icon:
-            start=(w-font.measure(self.display_text)-26)/2
-            draw_icon(self,icon,start+9,22,text)
-            self.create_text(start+26,22,text=self.display_text,anchor='w',fill=text,font=font)
-        else:self.create_text(w/2,22,text=self.display_text,fill=text,font=font)
+        if font.measure(self.display_text)>w-20:font.configure(size=11)
+        self.create_text(w/2,22,text=self.display_text,fill=text,font=font)
+
 
 
 class NumberField(tk.Canvas):
@@ -234,7 +198,7 @@ class MusicUI:
         title=tk.Frame(row,bg=CREAM);title.pack(side='left')
         self.label(title,'Gesture Music',20,bold=True).pack(anchor='w')
         self.label(title,'เพลงของคุณ ในจังหวะของมือ',10,MUTED).pack(anchor='w')
-        self.language_button=SoftButton(row,'EN',self.toggle_language,width=78,icon='language')
+        self.language_button=SoftButton(row,'EN',self.toggle_language,width=78)
         self.language_button.pack(side='right',padx=(12,0))
         self.read_button=SoftButton(row,'อ่านสถานะ Apple Music',lambda:self.app.request('status'),width=225)
         self.read_button.pack(side='right')
@@ -302,7 +266,7 @@ class MusicUI:
         mini=tk.Frame(page,bg=SOFT,padx=16,pady=12);mini.pack(fill='x',pady=(4,0))
         self.mini_cover=tk.Label(mini,bg=SOFT,width=64,height=64,bd=0,highlightthickness=0)
         self.mini_cover.pack(side='left',padx=(0,14));self.covers.append((self.mini_cover,64))
-        SoftButton(mini,'ดูหน้ากำลังฟัง',lambda:self.show('music'),width=160,icon='music').pack(side='right',padx=(14,0))
+        SoftButton(mini,'ดูหน้ากำลังฟัง',lambda:self.show('music'),width=160).pack(side='right',padx=(14,0))
         details=tk.Frame(mini,bg=SOFT);details.pack(side='left',fill='x',expand=True)
         self.label(details,self.mini_title,13,bold=True).pack(anchor='w')
         self.label(details,self.mini_details,11,MUTED).pack(anchor='w')
@@ -488,9 +452,6 @@ class MusicUI:
         for i,(label,size) in enumerate(self.covers):
             if self.cover_image is None:
                 picture=Image.new('RGB',(size,size),SKY)
-                draw=ImageDraw.Draw(picture)
-                draw.ellipse((size*.55,-size*.3,size*1.4,size*.55),fill=CREAM)
-                draw.ellipse((size*.18,size*.3,size*.65,size*.77),outline=BLUE,width=max(1,size//50))
             else:picture=ImageOps.fit(self.cover_image,(size,size),method=Image.Resampling.LANCZOS)
             mask=Image.new('L',(size,size),0)
             ImageDraw.Draw(mask).rounded_rectangle((0,0,size,size),radius=min(16,size//5),fill=255)
