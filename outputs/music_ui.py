@@ -157,6 +157,7 @@ class MusicUI:
         self.release = LocalizedVar()
         self.timing = LocalizedVar()
         self.control_state = LocalizedVar(value='โหมดดูผล')
+        self.control_hint = LocalizedVar(value='ค้างท่า = 1 คำสั่ง')
         self.camera_caption = tk.StringVar(value='เปิดกล้องเพื่อลองท่า')
         self.settings_values = {}
         self.header()
@@ -176,7 +177,7 @@ class MusicUI:
         self.content.pack(side='left',fill='both',expand=True)
         self.pages = {name:tk.Frame(self.content,bg=CREAM,padx=26,pady=20)
                       for name in ('camera','music','settings')}
-        self.controls=[];self.videos=[];self.covers=[];self.transport=[]
+        self.controls=[];self.videos=[];self.covers=[];self.transport=[];self.volume_groups=[]
         self.build_camera(self.pages['camera'])
         self.build_music(self.pages['music'])
         self.build_settings(self.pages['settings'])
@@ -231,7 +232,11 @@ class MusicUI:
         button=SoftButton(group,'เริ่มควบคุมเพลง',self.app.toggle_control,primary=True)
         button.pack(fill='x',pady=(8,8));button.configure(state='disabled')
         self.label(group,self.timing,11,INK,wrap=210).pack(anchor='w')
-        self.label(group,'ค้างท่า = 1 คำสั่ง',11,MUTED,wrap=210).pack(anchor='w',pady=(5,0))
+        self.label(group,self.control_hint,11,MUTED,wrap=210).pack(anchor='w',pady=(5,0))
+        volume=tk.Frame(group,bg=SOFT)
+        self.label(volume,self.app.volume_status,12,BLUE,bold=True,wrap=210).pack(anchor='w',pady=(8,2))
+        self.label(volume,self.app.volume_feedback,11,INK,wrap=210).pack(anchor='w')
+        self.volume_groups.append(volume)
         self.controls.append(button)
         return button
 
@@ -253,10 +258,13 @@ class MusicUI:
         self.guide(left,True)
         self.label(aside,'ท่าที่ตรวจพบ',10,MUTED).pack(anchor='w',pady=(12,0))
         self.label(aside,self.app.pose,22,bold=True,wrap=230).pack(anchor='w',pady=(4,16))
-        self.label(aside,self.confidence,38,BLUE).pack(anchor='w')
-        self.label(aside,'คะแนนโมเดล',9,MUTED).pack(anchor='w')
-        self.label(aside,self.threshold,11,MUTED).pack(anchor='w',pady=(3,0))
-        self.label(aside,self.hold,10,MUTED,wrap=230).pack(anchor='w',pady=(22,8))
+        self.confidence_group=tk.Frame(aside,bg=CREAM)
+        self.confidence_group.pack(fill='x')
+        self.label(self.confidence_group,self.confidence,38,BLUE).pack(anchor='w')
+        self.label(self.confidence_group,'คะแนนโมเดล',9,MUTED).pack(anchor='w')
+        self.label(self.confidence_group,self.threshold,11,MUTED).pack(anchor='w',pady=(3,0))
+        self.hold_label=self.label(aside,self.hold,10,MUTED,wrap=230)
+        self.hold_label.pack(anchor='w',pady=(22,8))
         self.hold_bar=tk.Canvas(aside,height=6,bg=SOFT,highlightthickness=0)
         self.hold_bar.pack(fill='x')
         self.control_button=self.control(aside)
@@ -292,10 +300,13 @@ class MusicUI:
             b.pack(side='left',padx=4);b.configure(state='disabled');self.transport.append((b,key))
         self.label(focus,'ปุ่มเพลงสั่งงานทันที · โหมดดูผลใช้กับท่ามือ',9,MUTED).pack(pady=(10,0))
         camera=self.camera_box(aside,True);camera.pack(fill='x');camera.configure(height=200);camera.pack_propagate(False)
+        self.music_camera_box=camera
         self.label(aside,self.app.pose,16,bold=True,wrap=230).pack(anchor='w',pady=(15,0))
         self.control(aside)
-        self.label(aside,'สลับมุมมองได้โดยไม่หยุดรับท่า',11,MUTED,wrap=230).pack(anchor='w',pady=(0,10))
-        SoftButton(aside,'ขยายกล้องและดูผล',lambda:self.show('camera')).pack(fill='x')
+        self.music_camera_help=self.label(aside,'สลับมุมมองได้โดยไม่หยุดรับท่า',11,MUTED,wrap=230)
+        self.music_camera_help.pack(anchor='w',pady=(0,10))
+        self.expand_camera_button=SoftButton(aside,'ขยายกล้องและดูผล',lambda:self.show('camera'))
+        self.expand_camera_button.pack(fill='x')
         self.label(page,self.app.feedback,10,MUTED,wrap=850).pack(anchor='w',pady=(8,0))
 
     def build_settings(self,page):
@@ -335,9 +346,11 @@ class MusicUI:
         self.label(advanced,'เว้นเกินนี้จะเริ่มนับเวลาค้างท่าใหม่',10,MUTED).pack(anchor='w')
         def toggle_advanced():
             if advanced.winfo_manager():advanced.pack_forget()
-            else:advanced.pack(fill='x',after=advanced_button,pady=4)
-        advanced_button=SoftButton(form,'การตั้งค่าเพิ่มเติม',toggle_advanced,width=180)
-        advanced_button.pack(anchor='w',pady=(8,0))
+            else:advanced.pack(fill='x',after=extras,pady=4)
+        extras=tk.Frame(form,bg=CREAM);extras.pack(fill='x',pady=(8,0))
+        advanced_button=SoftButton(extras,'การตั้งค่าเพิ่มเติม',toggle_advanced,width=180)
+        advanced_button.pack(side='left')
+        SoftButton(extras,'ทดลองท่าเพิ่มเติม',self.open_experimental,width=180).pack(side='left',padx=(12,0))
         self.label(form,'บันทึกแล้วกลับโหมดดูผล เพื่อให้ลองท่าก่อนเปิดควบคุมเพลง',10,MUTED).pack(anchor='w',pady=(10,6))
         buttons=tk.Frame(form,bg=CREAM);buttons.pack(fill='x',pady=8)
         SoftButton(buttons,'บันทึกและใช้ค่า',self.save_settings,primary=True,width=170).pack(side='right')
@@ -346,6 +359,38 @@ class MusicUI:
         self.language_button=SoftButton(form,'EN',self.toggle_language,width=100)
         self.root.bind('<Control-Shift-L>',self.reveal_language)
         self.root.bind('<Control-Shift-l>',self.reveal_language)
+
+    def open_experimental(self):
+        if not hasattr(self,'experimental_window'):
+            window=tk.Toplevel(self.root,bg=CREAM)
+            window.locale=self.locale
+            window.geometry('490x440');window.resizable(False,False)
+            window.transient(self.root)
+            window.protocol('WM_DELETE_WINDOW',window.withdraw)
+            self.experimental_window=window
+            body=tk.Frame(window,bg=CREAM,padx=24,pady=20);body.pack(fill='both',expand=True)
+            self.label(body,'ท่าเพิ่มเติม · รุ่นทดลอง',18,bold=True).pack(anchor='w')
+            self.label(body,'ยังต้องลองกับมือจริง · ปิดทุกครั้งที่เปิดโปรแกรม',11,MUTED,wrap=440).pack(anchor='w',pady=(4,14))
+            self.experimental_volume=tk.BooleanVar()
+            self.experimental_palm=tk.BooleanVar()
+            for source,variable,description in [
+                ('โหมดจีบปรับเสียง Apple Music',self.experimental_volume,
+                 'พับกลาง–นาง–ก้อย · ค้างจีบหรือกาง 0.45 วินาที\nกางเพิ่ม · หุบลด · ท่าเปลี่ยนเพลงพักในโหมดนี้'),
+                ('แบมือค้างเพื่อพัก / เริ่มควบคุม',self.experimental_palm,
+                 'แบทั้งห้านิ้ว 1.2 วินาที แล้วปล่อย\nตรวจท่านี้ได้ระหว่างพัก ถ้ากล้องยังเปิดอยู่')]:
+                check=tk.Checkbutton(body,variable=variable,bg=CREAM,fg=INK,activebackground=CREAM,
+                                     selectcolor=CREAM,font=(FONT,12,'bold'),anchor='w',bd=0)
+                self.locale.bind(check,source);check.pack(anchor='w',pady=(4,0))
+                self.label(body,description,11,MUTED,wrap=435).pack(anchor='w',padx=(25,0),pady=(3,10))
+            self.label(body,'ใช้ค่าแล้วกลับโหมดดูผล · กดเริ่มควบคุมเพื่อส่งคำสั่งจริง',11,MUTED,wrap=435).pack(anchor='w',pady=(4,10))
+            def apply():
+                self.app.set_experimental(self.experimental_volume.get(),self.experimental_palm.get())
+                window.withdraw();self.show('camera')
+            SoftButton(body,'ใช้โหมดทดลอง',apply,primary=True,width=180).pack(anchor='e')
+        self.experimental_volume.set(self.app.volume_mode)
+        self.experimental_palm.set(self.app.palm_enabled)
+        self.experimental_window.title(self.locale.text('ทดลองท่าเพิ่มเติม'))
+        self.experimental_window.deiconify();self.experimental_window.lift()
 
     def reveal_language(self,event=None):
         if self.view!='settings':return
@@ -398,6 +443,29 @@ class MusicUI:
             b.configure(text='พักการควบคุม' if self.app.armed else 'เริ่มควบคุมเพลง',
                         state='normal' if self.app.camera_running and self.app.last_frame is not None else 'disabled')
         self.open_button.configure(text='ปิดกล้อง' if self.app.camera_running else 'เปิดกล้อง')
+        for group in self.volume_groups:
+            if self.app.volume_mode:
+                if not group.winfo_manager():group.pack(fill='x')
+            else:group.pack_forget()
+        snapshot=self.app.last_volume
+        if snapshot:
+            self.app.volume_status.set(f'เสียง Apple Music {snapshot["level"]:.0%}'+(' · ปิดเสียง' if snapshot.get('muted') else ''))
+        else:self.app.volume_status.set('เสียง Apple Music · ยังอ่านไม่ได้')
+        if self.app.volume_mode:
+            self.control_state.set('โหมดจีบ · ควบคุมเสียง' if self.app.armed else 'โหมดจีบ · ดูผล')
+            self.timing.set(f'ค้างจีบ {self.app.pinch.hold:g} วินาที · พับอีกสามนิ้ว')
+            self.control_hint.set('เอามือออกเพื่อจบ')
+            self.confidence_group.pack_forget()
+            self.music_camera_box.configure(height=140)
+            self.music_camera_help.pack_forget()
+        else:
+            self.timing.set(f'ค้าง {self.app.config["hold_seconds"]:g} วินาที · ปล่อย {self.app.config["release_seconds"]:g} วินาที')
+            self.control_hint.set('ค้างท่า = 1 คำสั่ง')
+            if not self.confidence_group.winfo_manager():
+                self.confidence_group.pack(fill='x',before=self.hold_label)
+            self.music_camera_box.configure(height=200)
+            if not self.music_camera_help.winfo_manager():
+                self.music_camera_help.pack(anchor='w',pady=(0,10),before=self.expand_camera_button)
 
     def toggle_language(self):
         try:self.locale.set_language('en' if self.locale.language=='th' else 'th')
@@ -427,6 +495,10 @@ class MusicUI:
         gate=self.app.gate
         ratio=1 if gate.latched else min(1,max(0,(timestamp-gate.since)/gate.hold)) if gate.since is not None else 0
         self.hold.set('ปล่อยมือก่อนออกคำสั่งใหม่' if gate.latched else f'ค้างท่า {ratio*gate.hold:.1f} / {gate.hold:g} วินาที' if gate.since is not None else 'พร้อมรับท่า')
+        if self.app.volume_mode:
+            pinch=self.app.pinch
+            ratio=1 if pinch.active else min(1,max(0,(timestamp-pinch.since)/pinch.hold)) if pinch.since is not None else 0
+            self.hold.set('ขยับนิ้วเพื่อปรับเสียง' if pinch.active else 'ค้างจีบเพื่อเริ่ม')
         self.hold_bar.delete('all')
         self.hold_bar.create_rectangle(0,0,self.hold_bar.winfo_width()*ratio,6,fill=BLUE,outline='')
 

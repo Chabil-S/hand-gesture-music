@@ -19,6 +19,8 @@ from live_settings import load_settings,save_settings,validate_settings
 from music_ui import MusicUI
 from music_display import MusicDisplay
 from ui_language import Localizer, LocalizedVar
+from apple_music_volume import VolumeWorker
+from dynamic_gestures import geometry, PinchVolume, PalmControl
 
 BASE=Path(__file__).resolve().parent
 NAMES={'neutral':'ไม่สั่งงาน','next':'ถัดไป','previous':'ก่อนหน้า','toggle':'เล่น / พัก',
@@ -43,6 +45,14 @@ class LiveApp(Collector):
         self.hand_selector=ActiveHand()
         self.pending_count=0
         self.stop=threading.Event()
+        self.volume=VolumeWorker(self.stop)
+        self.pinch=PinchVolume()
+        self.palm=PalmControl()
+        self.volume_mode=False
+        self.palm_enabled=False
+        self.volume_available=False
+        self.last_volume=None
+        self.volume_read_at=0.
         self.camera_running=False
         self.armed=False
         self.busy=False
@@ -59,6 +69,8 @@ class LiveApp(Collector):
         self.detection=LocalizedVar(value='กล้องยังไม่เปิด')
         self.mode=LocalizedVar(value='โหมดดูผล • ยังไม่ส่งคำสั่งเพลง')
         self.feedback=LocalizedVar(value='กำมือ = เล่น/พัก\nV ชี้–กลาง พับโป้ง = ถัดไป\nนิ้วโป้ง = ก่อนหน้า')
+        self.volume_feedback=LocalizedVar(value='โหมดปรับเสียงปิดอยู่')
+        self.volume_status=LocalizedVar(value='เสียง Apple Music · —')
         self.timing_text=LocalizedVar()
         self.refresh_timing_text()
         self.ui=MusicUI(self)
@@ -68,6 +80,7 @@ class LiveApp(Collector):
         self.read_button=self.ui.read_button
         self.display=MusicDisplay(self.stop)
         self.display.start()
+        self.volume.start()
         self.root.protocol('WM_DELETE_WINDOW',self.close)
         self.root.after(40,self.poll)
 
@@ -90,6 +103,7 @@ class LiveApp(Collector):
             self.open_camera();return
         self.camera_running=False;self.armed=False;self.camera_stop.set()
         self.music.cancel_pending();self.gate.reset();self.hand_selector.reset()
+        self.reset_dynamic()
         self.last_frame=None;self.last_prediction=None
         self.detection.set('กล้องปิด');self.pose.set('รอท่ามือ')
         self.mode.set('โหมดดูผล • กล้องปิด')
@@ -107,6 +121,7 @@ class LiveApp(Collector):
         save_settings(BASE/'live_settings.json',checked)
         self.armed=False
         self.music.cancel_pending()
+        self.reset_dynamic()
         self.hand_selector.reset()
         self.runtime_settings=checked
         self.config.update(checked)
@@ -126,6 +141,7 @@ class LiveApp(Collector):
         if not self.camera_running or self.last_frame is None:return
         self.armed=not self.armed
         self.music.cancel_pending()
+        self.reset_dynamic()
         self.hand_selector.reset()
         self.gate.reset()
         # Starting always requires a release, preventing the current pose from firing.
@@ -133,8 +149,57 @@ class LiveApp(Collector):
         self.control_button.configure(text='พักการควบคุม' if self.armed else 'เริ่มควบคุมเพลง')
         self.mode.set('ควบคุมเพลงอยู่ • เอามือออกก่อนเริ่ม' if self.armed else 'โหมดดูผล • ยังไม่ส่งคำสั่งเพลง')
         self.feedback.set(f'เอามือออกอย่างน้อย {self.config["release_seconds"]:g} วินาที แล้วทำท่าคำสั่ง' if self.armed else 'ลองทั้งสามท่าได้โดยไม่เปลี่ยนเพลง')
+        if self.volume_mode:
+            self.feedback.set('ค้างจีบหรือกางปลายนิ้ว แล้วขยับเพื่อปรับเสียง' if self.armed else 'ดูผลจีบ · ยังไม่ปรับเสียง')
 
         self.ui.sync_controls()
+
+    def reset_dynamic(self):
+        self.pinch.reset();self.palm.reset();self.volume.cancel()
+
+    def set_experimental(self,volume_mode,palm_enabled):
+        """Session-only opt-in; changing modes always pauses and cancels queued work."""
+        self.armed=False
+        self.music.cancel_pending();self.gate.reset();self.hand_selector.reset()
+        self.reset_dynamic()
+        self.volume_mode=bool(volume_mode);self.palm_enabled=bool(palm_enabled)
+        self.volume_available=False;self.last_volume=None
+        self.mode.set('โหมดดูผล • ยังไม่ส่งคำสั่งเพลง')
+        self.volume_feedback.set('กำลังอ่านระดับเสียง…' if self.volume_mode else 'โหมดปรับเสียงปิดอยู่')
+        self.feedback.set('โหมดปรับเสียง · ท่าเปลี่ยนเพลงพักอยู่' if self.volume_mode else 'กลับโหมดท่าเพลงแล้ว')
+        if self.volume_mode:self.volume.submit()
+        self.ui.sync_controls()
+
+    def process_dynamic(self,sample,timestamp,changed=False):
+        if changed:
+            self.reset_dynamic()
+            if self.volume_mode:self.volume.submit()
+        palm=self.palm.update(sample,timestamp) if self.palm_enabled else {'reserved':False,'toggle':False}
+        if palm['toggle']:
+            self.toggle_control()
+            self.log({'event':'palm_control','armed':self.armed})
+        if palm['reserved']:
+            self.pinch.reset();self.volume.cancel()
+            if not palm['toggle']:
+                self.feedback.set('ปล่อยมือก่อนแบมืออีกครั้ง' if self.palm.latched else
+                                  f'แบมือค้าง {palm["progress"]*self.palm.hold:.1f} / {self.palm.hold:g} วินาที')
+            return True
+        if not self.volume_mode:return False
+        was_active=self.pinch.active
+        result=self.pinch.update(sample,timestamp)
+        if was_active and not self.pinch.active:self.volume.cancel()
+        state=result['state']
+        if state=='active':
+            self.volume_feedback.set('กางเพิ่ม · หุบลด · เอามือออกเพื่อจบ' if self.armed else 'ดูผลจีบ · ยังไม่ปรับเสียง')
+        elif state=='hold':self.volume_feedback.set('ค้างปลายนิ้วเพื่อเริ่มปรับเสียง')
+        else:self.volume_feedback.set('จีบหรือกางชี้–โป้ง · พับอีกสามนิ้ว')
+        delta=result['delta']
+        if delta is not None:
+            if self.armed and self.volume_available and self.ui.music.get('connected'):
+                self.volume.submit(delta)
+            elif not self.armed:
+                self.volume_feedback.set('ดูผลจีบ · เพิ่มเสียง' if delta>0 else 'ดูผลจีบ · ลดเสียง')
+        return True  # Explicit volume mode reserves all poses, including at rest.
 
     def log(self,event):
         event['time']=datetime.now(timezone(timedelta(hours=7))).isoformat()
@@ -164,6 +229,7 @@ class LiveApp(Collector):
                 self.mode.set('กล้องมีปัญหา • หยุดส่งเพลงแล้ว')
                 self.control_button.configure(state='disabled',text='เริ่มควบคุมเพลง')
                 self.music.cancel_pending()
+                self.reset_dynamic()
                 self.open_button.configure(state='normal');self.gate.reset()
                 self.last_frame=None;self.ui.camera_off()
                 self.pose.set('กล้องมีปัญหา');self.ui.render_gesture(0,time.monotonic())
@@ -180,7 +246,9 @@ class LiveApp(Collector):
                         prediction['label']=raw_label if prediction['score']>=self.config['threshold'] else 'uncertain'
                     except ValueError:pass
                     classified.append(prediction)
-                active,changed,reason=self.hand_selector.select(classified,frame['t'],not self.gate.latched)
+                selection_hands=[dict(hand,label='neutral') for hand in classified] if self.volume_mode else classified
+                can_switch=not self.pinch.active if self.volume_mode else not self.gate.latched
+                active,changed,reason=self.hand_selector.select(selection_hands,frame['t'],can_switch)
                 if changed:
                     # A different hand must complete its own confirmation period.
                     latched=self.gate.latched
@@ -192,15 +260,19 @@ class LiveApp(Collector):
                                   (int(max(xs)*frame['w'])+10,int(max(ys)*frame['h'])+10),(55,235,130),3)
                 else:
                     label='uncertain' if reason=='conflict' else 'no_hand';score=0
+                sample=geometry(classified[active]['coords'],frame['w'],frame['h']) if active is not None and (self.volume_mode or self.palm_enabled) else None
+                reserved=self.process_dynamic(sample,frame['t'],changed) if self.volume_mode or self.palm_enabled else False
                 self.ui.render_frame(frame['rgb']);self.ui.sync_controls()
                 self.pose.set(NAMES[label])
+                if reserved:self.pose.set('แบมือ' if self.palm_enabled and sample and sample['open_palm'] else
+                                          'ปรับเสียงด้วยนิ้ว' if sample and sample['pinch_pose'] else 'รอท่าจีบ')
                 target=self.config.get('acceptance_policy',{}).get('minimum_command_recall')
                 policy_text=f' • เป้าหมายประเมินรุ่น {target:.0%}' if target is not None else ''
                 self.score.set((f'คะแนนโมเดล {score:.2f} • คะแนนขั้นต่ำรับท่า {self.config["threshold"]:.0%}' if score else 'ยังไม่มีพิกัดมือที่ใช้จำแนกได้')+policy_text)
                 self.detection.set('สองมือสั่งต่างกัน • รอให้เหลือท่าคำสั่งเดียว' if reason=='conflict'
                                    else f'พบ {frame["count"]} มือ • รับจากมือกรอบสีเขียว' if active is not None
                                    else 'รอมือสั่งงานกลับมา' if frame['count'] else 'ไม่พบมือ')
-                command=self.gate.update(label,frame['t'])
+                command=self.gate.update('uncertain' if reserved else label,frame['t'])
                 if command:
                     if self.armed:
                         self.log({'event':'gesture_confirmed','action':command,'score':score,'mode':'control'})
@@ -208,12 +280,13 @@ class LiveApp(Collector):
                     else:
                         self.feedback.set('ยืนยันท่า: '+NAMES[command]+'\nโหมดดูผล • ไม่ส่งเพลง\nเอามือออก แล้วลองท่าถัดไป')
                         self.log({'event':'gesture_confirmed','action':command,'score':score,'mode':'preview'})
-                elif self.gate.latched and not self.busy and self.last_prediction!=label and label not in ('no_hand','neutral'):
+                elif not reserved and self.gate.latched and not self.busy and self.last_prediction!=label and label not in ('no_hand','neutral'):
                     self.feedback.set('ปล่อยมือ แล้วทำท่าถัดไป')
                 self.last_prediction=label
-                self.ui.render_gesture(score,frame['t'])
+                self.ui.render_gesture(0 if reserved else score,frame['t'])
         except queue.Empty:pass
         if self.last_frame is not None and time.monotonic()-self.last_frame>self.config['max_frame_gap_seconds']:
+            self.reset_dynamic()
             self.gate.update('uncertain',time.monotonic())
             self.pose.set('รอภาพกล้องใหม่')
             self.ui.render_gesture(0,time.monotonic())
@@ -237,13 +310,26 @@ class LiveApp(Collector):
                 self.feedback.set(prefix+'\n'+state_name)
                 self.log({'event':'music_result','action':action,'success':success,'result':result})
         except queue.Empty:pass
-        try:self.ui.set_music(self.display.results.get_nowait())
+        try:
+            data=self.display.results.get_nowait()
+            self.ui.set_music(data)
+            if not data.get('connected'):
+                self.volume_available=False;self.last_volume=None;self.pinch.reset();self.volume.cancel()
         except queue.Empty:pass
+        try:
+            snapshot=self.volume.results.get_nowait()
+            self.volume_available=snapshot.get('available',False)
+            self.last_volume=snapshot if self.volume_available else None
+            if self.volume_mode:self.ui.sync_controls()
+        except queue.Empty:pass
+        if self.volume_mode and time.monotonic()-self.volume_read_at>=2 and not self.pinch.active:
+            self.volume_read_at=time.monotonic();self.volume.submit()
         self.root.after(40,self.poll)
 
     def close(self):
         self.armed=False
         self.music.cancel_pending()
+        self.reset_dynamic()
         self.stop.set()
         self.camera_stop.set()
         self.root.destroy()
