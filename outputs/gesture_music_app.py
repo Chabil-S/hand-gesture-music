@@ -231,7 +231,9 @@ class LiveApp(Collector):
         else:self.volume_feedback.set('จีบหรือกางชี้–โป้ง · พับอีกสามนิ้ว')
         delta=result['delta']
         if delta is not None:
-            if self.armed and self.volume_available and self.ui.music.get('connected'):
+            if self.armed:
+                # Core Audio resolves and verifies the exact app session on each
+                # write. A stale read/metadata snapshot must not suppress writes.
                 self.volume.submit(delta)
             elif not self.armed:
                 self.volume_feedback.set('ดูผลจีบ · เพิ่มเสียง' if delta>0 else 'ดูผลจีบ · ลดเสียง')
@@ -361,16 +363,21 @@ class LiveApp(Collector):
         try:
             data=self.display.results.get_nowait()
             self.ui.set_music(data)
-            if not data.get('connected'):
-                self.volume_available=False;self.last_volume=None;self.pinch.reset();self.volume.cancel()
         except queue.Empty:pass
         try:
             snapshot=self.volume.results.get_nowait()
             self.volume_available=snapshot.get('available',False)
             self.last_volume=snapshot if self.volume_available else None
+            if snapshot.get('requested_delta') is not None:
+                self.log({'event':'volume_result','result':snapshot})
+            if not self.volume_available:
+                reason=snapshot.get('reason')
+                self.volume_feedback.set('เปิด Apple Music และเล่นเพลงเพื่อปรับเสียง' if reason=='missing' else
+                                         'พบช่องเสียง Apple Music หลายช่อง · ยังไม่ปรับเสียง' if reason=='ambiguous' else
+                                         'ปรับเสียงไม่ได้ · '+snapshot.get('error','ยังอ่านช่องเสียงไม่ได้'))
             if self.volume_enabled:self.ui.sync_controls()
         except queue.Empty:pass
-        if self.volume_enabled and time.monotonic()-self.volume_read_at>=2 and not self.pinch.active:
+        if self.volume_enabled and time.monotonic()-self.volume_read_at>=2 and (not self.pinch.active or not self.volume_available):
             self.volume_read_at=time.monotonic();self.volume.submit()
         self.root.after(40,self.poll)
 

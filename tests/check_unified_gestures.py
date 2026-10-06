@@ -125,6 +125,16 @@ assert app.gate.latched and app.gate.release_since==release_started
 clock+=.4;feed([])
 assert not app.gate.latched
 
+# A stale audio read or unavailable song metadata must not prevent a scoped
+# write attempt; the worker itself determines whether an audio session exists.
+release();app.volume_available=False
+ui.set_music({'connected':False})
+before=len(volume)
+hold('neutral',pinch(.15),12)
+for i in range(20):hold('neutral',pinch(.15+i*.05),1)
+assert any(delta is not None and delta>0 for delta in volume[before:])
+app.volume_available=True
+ui.set_music({'connected':True,'title':'Test track','status':'PLAYING'})
 
 release()
 for i in range(13):feed([(.3,'neutral',pinch(.15)),(.8,'neutral',None)])

@@ -146,7 +146,9 @@ class AppleMusicVolume:
                 return dict(before, cancelled=True)
             level = max(0., min(1., before['level'] + delta))
             call(volume, 3, (level, None), (C.c_float, C.c_void_p))
-            return self.snapshot(volume)  # Preserve mute state; verify actual session value.
+            after=self.snapshot(volume)  # Preserve mute state; verify actual session value.
+            return dict(after,before_level=before['level'],requested_delta=delta,
+                        verified=abs(after['level']-level)<1e-5)
 
 
 class VolumeWorker:
@@ -186,6 +188,7 @@ class VolumeWorker:
                 result = self.backend.read() if delta is None else self.backend.adjust(delta, valid)
             except Exception as error:
                 result = {'available': False, 'reason': 'error', 'error': str(error)}
+            if delta is not None:result=dict(result,requested_delta=delta)
             if epoch != self.epoch or self.stop.is_set():
                 continue
             try:self.results.get_nowait()

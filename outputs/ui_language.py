@@ -4,6 +4,9 @@ import re
 import tkinter as tk
 
 EN = {
+    'เปิด Apple Music และเล่นเพลงเพื่อปรับเสียง':'Open Apple Music and play a track to adjust volume',
+    'พบช่องเสียง Apple Music หลายช่อง · ยังไม่ปรับเสียง':'Multiple Apple Music audio sessions · volume unchanged',
+    'ปรับเสียงไม่ได้':'Volume adjustment unavailable',
     'ท่าควบคุม':'Gesture controls',
     'ใช้ร่วมกับท่าเพลง · จำตัวเลือกเมื่อเปิดใหม่':'Works with track gestures · choices saved for next launch',
     'จีบปรับเสียง Apple Music':'Pinch for Apple Music volume',
@@ -116,6 +119,7 @@ EN = {
 }
 
 PATTERNS = [
+    (r'ปรับเสียงไม่ได้ · (.*)',r'Volume adjustment unavailable · \1'),
     (r'จีบค้าง ([\d.]+) / ([\d.]+) วินาที',r'Pinch \1 / \2 s'),
     (r'แบมือ ([\d.]+) วินาที · ปล่อย ([\d.]+) วินาที',r'Palm \1 s · release \2 s'),
     (r'ค้างจีบ ([\d.]+) วินาที · พับอีกสามนิ้ว',r'Hold pinch \1 s · fold the other fingers'),
