@@ -14,6 +14,8 @@ outputs/hand_verification.json
 outputs/latest_model.json
 outputs/ui_preferences.json
 outputs/ui_preferences.tmp
+outputs/gesture_options.json
+outputs/gesture_options.tmp
 outputs/*events.jsonl
 outputs/data_audit.json
 outputs/live_guard_validation.json
