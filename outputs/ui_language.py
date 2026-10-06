@@ -4,6 +4,8 @@ import re
 import tkinter as tk
 
 EN = {
+    'เริ่มควบคุมแล้ว · ปล่อยมือ':'Gestures enabled · release hand',
+    'พักการควบคุมแล้ว · ปล่อยมือ':'Gestures paused · release hand',
     'ค้างจีบหรือกางปลายนิ้ว แล้วขยับเพื่อปรับเสียง':'Hold closed or open fingertips, then move to adjust volume',
     'ขยับนิ้วเพื่อปรับเสียง':'Move to adjust volume', 'ค้างจีบเพื่อเริ่ม':'Hold pinch to start',
     'ค้างจีบ 0.45 วินาที · พับอีกสามนิ้ว':'Hold pinch 0.45 s · fold the other fingers',
@@ -103,6 +105,7 @@ EN = {
 }
 
 PATTERNS = [
+    (r'แบมือ ([\d.]+) วินาที · ปล่อย ([\d.]+) วินาที',r'Palm \1 s · release \2 s'),
     (r'ค้างจีบ ([\d.]+) วินาที · พับอีกสามนิ้ว',r'Hold pinch \1 s · fold the other fingers'),
     (r'แบมือค้าง ([\d.]+) / ([\d.]+) วินาที',r'Open palm \1 / \2 s'),
     (r'เสียง Apple Music (\d+%) · ปิดเสียง',r'Apple Music volume \1 · muted'),

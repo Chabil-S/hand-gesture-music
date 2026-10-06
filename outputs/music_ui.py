@@ -158,6 +158,7 @@ class MusicUI:
         self.timing = LocalizedVar()
         self.control_state = LocalizedVar(value='โหมดดูผล')
         self.control_hint = LocalizedVar(value='ค้างท่า = 1 คำสั่ง')
+        self.palm_indicator = LocalizedVar()
         self.camera_caption = tk.StringVar(value='เปิดกล้องเพื่อลองท่า')
         self.settings_values = {}
         self.header()
@@ -178,6 +179,7 @@ class MusicUI:
         self.pages = {name:tk.Frame(self.content,bg=CREAM,padx=26,pady=20)
                       for name in ('camera','music','settings')}
         self.controls=[];self.videos=[];self.covers=[];self.transport=[];self.volume_groups=[]
+        self.palm_groups=[];self.palm_bars=[]
         self.build_camera(self.pages['camera'])
         self.build_music(self.pages['music'])
         self.build_settings(self.pages['settings'])
@@ -225,7 +227,7 @@ class MusicUI:
         self.label(bottom,self.app.detection,9,BLUE,wrap=230 if small else 520).pack(anchor='w')
         return box
 
-    def control(self, parent):
+    def control(self, parent, palm_progress=False):
         group=tk.Frame(parent,bg=SOFT,padx=10,pady=10)
         group.pack(fill='x',pady=(12,8))
         self.label(group,self.control_state,12,BLUE,bold=True,wrap=210).pack(anchor='w')
@@ -237,6 +239,12 @@ class MusicUI:
         self.label(volume,self.app.volume_status,12,BLUE,bold=True,wrap=210).pack(anchor='w',pady=(8,2))
         self.label(volume,self.app.volume_feedback,11,INK,wrap=210).pack(anchor='w')
         self.volume_groups.append(volume)
+        if palm_progress:
+            palm=tk.Frame(group,bg=SOFT)
+            self.label(palm,self.palm_indicator,11,BLUE,bold=True,wrap=210).pack(anchor='w',pady=(8,6))
+            bar=tk.Canvas(palm,height=6,bg=CREAM,highlightthickness=0)
+            bar.pack(fill='x',pady=(0,4))
+            self.palm_groups.append(palm);self.palm_bars.append(bar)
         self.controls.append(button)
         return button
 
@@ -302,7 +310,7 @@ class MusicUI:
         camera=self.camera_box(aside,True);camera.pack(fill='x');camera.configure(height=200);camera.pack_propagate(False)
         self.music_camera_box=camera
         self.label(aside,self.app.pose,16,bold=True,wrap=230).pack(anchor='w',pady=(15,0))
-        self.control(aside)
+        self.control(aside,palm_progress=True)
         self.music_camera_help=self.label(aside,'สลับมุมมองได้โดยไม่หยุดรับท่า',11,MUTED,wrap=230)
         self.music_camera_help.pack(anchor='w',pady=(0,10))
         self.expand_camera_button=SoftButton(aside,'ขยายกล้องและดูผล',lambda:self.show('camera'))
@@ -438,29 +446,39 @@ class MusicUI:
         self.refresh_settings();self.show('camera')
 
     def sync_controls(self):
+        palm_active=self.app.palm_enabled and self.app.palm_feedback.get('reserved',False)
         self.control_state.set('กำลังควบคุมด้วยมือ' if self.app.armed else 'โหมดดูผล · ยังไม่ส่งคำสั่งมือ')
         for b in self.controls:
             b.configure(text='พักการควบคุม' if self.app.armed else 'เริ่มควบคุมเพลง',
                         state='normal' if self.app.camera_running and self.app.last_frame is not None else 'disabled')
         self.open_button.configure(text='ปิดกล้อง' if self.app.camera_running else 'เปิดกล้อง')
         for group in self.volume_groups:
-            if self.app.volume_mode:
+            if self.app.volume_mode and not palm_active:
+                if not group.winfo_manager():group.pack(fill='x')
+            else:group.pack_forget()
+        for group in self.palm_groups:
+            if palm_active:
                 if not group.winfo_manager():group.pack(fill='x')
             else:group.pack_forget()
         snapshot=self.app.last_volume
         if snapshot:
             self.app.volume_status.set(f'เสียง Apple Music {snapshot["level"]:.0%}'+(' · ปิดเสียง' if snapshot.get('muted') else ''))
         else:self.app.volume_status.set('เสียง Apple Music · ยังอ่านไม่ได้')
-        if self.app.volume_mode:
+        if palm_active:
+            self.timing.set(f'แบมือ {self.app.palm.hold:g} วินาที · ปล่อย {self.app.palm.release:g} วินาที')
+            self.control_hint.set('ปล่อยมือก่อนแบมืออีกครั้ง')
+        elif self.app.volume_mode:
             self.control_state.set('โหมดจีบ · ควบคุมเสียง' if self.app.armed else 'โหมดจีบ · ดูผล')
             self.timing.set(f'ค้างจีบ {self.app.pinch.hold:g} วินาที · พับอีกสามนิ้ว')
             self.control_hint.set('เอามือออกเพื่อจบ')
+        else:
+            self.timing.set(f'ค้าง {self.app.config["hold_seconds"]:g} วินาที · ปล่อย {self.app.config["release_seconds"]:g} วินาที')
+            self.control_hint.set('ค้างท่า = 1 คำสั่ง')
+        if self.app.volume_mode or palm_active:
             self.confidence_group.pack_forget()
             self.music_camera_box.configure(height=140)
             self.music_camera_help.pack_forget()
         else:
-            self.timing.set(f'ค้าง {self.app.config["hold_seconds"]:g} วินาที · ปล่อย {self.app.config["release_seconds"]:g} วินาที')
-            self.control_hint.set('ค้างท่า = 1 คำสั่ง')
             if not self.confidence_group.winfo_manager():
                 self.confidence_group.pack(fill='x',before=self.hold_label)
             self.music_camera_box.configure(height=200)
@@ -499,6 +517,17 @@ class MusicUI:
             pinch=self.app.pinch
             ratio=1 if pinch.active else min(1,max(0,(timestamp-pinch.since)/pinch.hold)) if pinch.since is not None else 0
             self.hold.set('ขยับนิ้วเพื่อปรับเสียง' if pinch.active else 'ค้างจีบเพื่อเริ่ม')
+        palm=self.app.palm_feedback
+        if self.app.palm_enabled and palm.get('reserved'):
+            ratio=palm.get('progress',0.)
+            state=palm.get('state')
+            text=('เริ่มควบคุมแล้ว · ปล่อยมือ' if self.app.armed else 'พักการควบคุมแล้ว · ปล่อยมือ') if state=='confirmed' else (
+                'ปล่อยมือก่อนแบมืออีกครั้ง' if state=='release' else
+                f'แบมือค้าง {ratio*self.app.palm.hold:.1f} / {self.app.palm.hold:g} วินาที')
+            self.hold.set(text);self.palm_indicator.set(text)
+        for bar in self.palm_bars:
+            bar.delete('all')
+            bar.create_rectangle(0,0,bar.winfo_width()*ratio,6,fill=BLUE,outline='')
         self.hold_bar.delete('all')
         self.hold_bar.create_rectangle(0,0,self.hold_bar.winfo_width()*ratio,6,fill=BLUE,outline='')
 

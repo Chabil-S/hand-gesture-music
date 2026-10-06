@@ -106,25 +106,30 @@ class PalmControl:
 
     def reset(self, require_release=True):
         self.latched=require_release
+        self.confirmed=False
         self.since=self.release_since=self.last_time=None
 
     def update(self, sample, timestamp):
         if self.last_time is not None and (timestamp<=self.last_time or timestamp-self.last_time>self.max_gap):
             self.since=self.release_since=None
             self.latched=True  # never toggle immediately after a tracking outage
+            self.confirmed=False
         self.last_time=timestamp
         palm=sample is not None and sample.get('open_palm',False)
         if not palm:
             self.since=None
             if self.release_since is None:self.release_since=timestamp
-            if timestamp-self.release_since>=self.release:self.latched=False
-            return {'reserved':False,'toggle':False,'progress':0.}
+            if timestamp-self.release_since>=self.release:
+                self.latched=False;self.confirmed=False
+            return {'reserved':False,'toggle':False,'progress':0.,'state':'waiting'}
         self.release_since=None
         if self.latched:
-            return {'reserved':True,'toggle':False,'progress':1.}
+            return {'reserved':True,'toggle':False,'progress':1. if self.confirmed else 0.,
+                    'state':'confirmed' if self.confirmed else 'release'}
         if self.since is None:self.since=timestamp
         progress=min(1,(timestamp-self.since)/self.hold)
         if progress>=1:
             self.latched=True;self.since=None
-            return {'reserved':True,'toggle':True,'progress':1.}
-        return {'reserved':True,'toggle':False,'progress':progress}
+            self.confirmed=True
+            return {'reserved':True,'toggle':True,'progress':1.,'state':'confirmed'}
+        return {'reserved':True,'toggle':False,'progress':progress,'state':'holding'}

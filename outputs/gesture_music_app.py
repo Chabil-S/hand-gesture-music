@@ -50,6 +50,7 @@ class LiveApp(Collector):
         self.palm=PalmControl()
         self.volume_mode=False
         self.palm_enabled=False
+        self.palm_feedback={'reserved':False,'progress':0.,'state':'waiting'}
         self.volume_available=False
         self.last_volume=None
         self.volume_read_at=0.
@@ -137,12 +138,12 @@ class LiveApp(Collector):
     def open_settings(self):
         self.ui.show('settings')
 
-    def toggle_control(self):
+    def toggle_control(self,preserve_hand=False):
         if not self.camera_running or self.last_frame is None:return
         self.armed=not self.armed
         self.music.cancel_pending()
         self.reset_dynamic()
-        self.hand_selector.reset()
+        if not preserve_hand:self.hand_selector.reset()
         self.gate.reset()
         # Starting always requires a release, preventing the current pose from firing.
         self.gate.latched=self.armed
@@ -156,6 +157,7 @@ class LiveApp(Collector):
 
     def reset_dynamic(self):
         self.pinch.reset();self.palm.reset();self.volume.cancel()
+        self.palm_feedback={'reserved':False,'progress':0.,'state':'waiting'}
 
     def set_experimental(self,volume_mode,palm_enabled):
         """Session-only opt-in; changing modes always pauses and cancels queued work."""
@@ -176,11 +178,16 @@ class LiveApp(Collector):
             if self.volume_mode:self.volume.submit()
         palm=self.palm.update(sample,timestamp) if self.palm_enabled else {'reserved':False,'toggle':False}
         if palm['toggle']:
-            self.toggle_control()
+            self.toggle_control(preserve_hand=True)
+            # Keep the completion visible until release, without toggling twice.
+            self.palm.confirmed=True;self.palm.last_time=timestamp
             self.log({'event':'palm_control','armed':self.armed})
+        self.palm_feedback=palm
         if palm['reserved']:
             self.pinch.reset();self.volume.cancel()
-            if not palm['toggle']:
+            if palm.get('state')=='confirmed':
+                self.feedback.set('เริ่มควบคุมแล้ว · ปล่อยมือ' if self.armed else 'พักการควบคุมแล้ว · ปล่อยมือ')
+            else:
                 self.feedback.set('ปล่อยมือก่อนแบมืออีกครั้ง' if self.palm.latched else
                                   f'แบมือค้าง {palm["progress"]*self.palm.hold:.1f} / {self.palm.hold:g} วินาที')
             return True
@@ -287,6 +294,7 @@ class LiveApp(Collector):
         except queue.Empty:pass
         if self.last_frame is not None and time.monotonic()-self.last_frame>self.config['max_frame_gap_seconds']:
             self.reset_dynamic()
+            self.ui.sync_controls()
             self.gate.update('uncertain',time.monotonic())
             self.pose.set('รอภาพกล้องใหม่')
             self.ui.render_gesture(0,time.monotonic())
