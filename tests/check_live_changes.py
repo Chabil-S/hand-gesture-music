@@ -17,6 +17,12 @@ assert selector.select([hand(.2,'next'),hand(.8,'toggle')],.2,False)[2]=='confli
 assert selector.select([hand(.8,'neutral')],.3,False)[2]=='active_missing'
 selector.reset()
 assert selector.select([hand(.2,'toggle'),hand(.8,'toggle')],0,True)[0] is not None
+selector.reset()
+assert selector.select([hand(.2,'pinch'),hand(.8,'neutral')],0,True)[0]==0
+assert selector.select([hand(.8,'neutral'),hand(.21,'pinch')],.1,False)[0]==1
+assert selector.select([hand(.2,'pinch'),hand(.8,'next')],.2,False)[2]=='conflict'
+selector.reset()
+assert selector.select([hand(.2,'palm'),hand(.8,'neutral')],0,True)[0]==0
 
 results=queue.Queue();blocked=threading.Event();entered=threading.Event();calls=[]
 def runner(action):

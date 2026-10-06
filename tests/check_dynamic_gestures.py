@@ -53,6 +53,8 @@ for mcp in (9,13,17):
     pinched[mcp+3]=x,.65,0
 pinched[4]=pinched[8]+(.02,0,0)
 assert geometry(pinched.reshape(-1),640,480)['pinch_pose']
+index_only=pinched.copy();index_only[4]=index_only[2]+(.01,.01,0)
+assert not geometry(index_only.reshape(-1),640,480)['pinch_pose']
 fully_open=pinched.copy();fully_open[4]=(-.15,.6,0)
 wide=geometry(fully_open.reshape(-1),640,480)
 assert wide['aperture']>1.6 and wide['pinch_pose']

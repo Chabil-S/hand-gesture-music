@@ -42,11 +42,14 @@ def geometry(coords, width, height):
     index_ready = index_angle>135 and index_tip_angle>130
     # Permit a gently curved index when the tips touch, but exclude a tight fist.
     index_ready = index_ready or (aperture<.26 and index_angle>105 and index_tip_angle>110)
+    thumb_angle=angle(points[2],points[3],points[4])
+    thumb_ready=(np.linalg.norm(points[4]-points[2])/scale>.35
+                 and (thumb_angle>105 or (aperture<.26 and thumb_angle>90)))
     return {
         'aperture':aperture,
         # Finger shape and palm quality identify the pose. A fixed aperture ceiling
         # excludes a natural full thumb/index spread and breaks ongoing movement.
-        'pinch_pose':bool(index_ready and all(folded[1:]) and math.isfinite(aperture)),
+        'pinch_pose':bool(index_ready and thumb_ready and all(folded[1:]) and math.isfinite(aperture)),
         'open_palm':bool(all(extended) and np.linalg.norm(points[4]-points[5])/scale>.45),
     }
 

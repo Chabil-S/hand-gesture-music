@@ -8,7 +8,7 @@ class ActiveHand:
     def __init__(self):self.wrist=None;self.missing_since=None
     def reset(self):self.wrist=None;self.missing_since=None
     def select(self,hands,t,can_switch):
-        commands=[i for i,h in enumerate(hands) if h['label'] in ('toggle','next','previous')]
+        commands=[i for i,h in enumerate(hands) if h['label'] in ('toggle','next','previous','pinch','palm')]
         if len({hands[i]['label'] for i in commands})>1:
             return None,False,'conflict'
         if not hands:
