@@ -29,3 +29,10 @@ outputs/evaluation_history.json
 
 # Private weighting experiment inputs and results
 outputs/weighted_experiments/
+
+# Local reports, evaluation records, scratch output and backups
+docs/MiniProject_Report/
+outputs/evaluations/
+/s
+*.bak
+*.tmp
